@@ -145,6 +145,87 @@ function uploadToR2(key, buffer, contentType) {
   });
 }
 
+function r2Request(method, key, buffer) {
+  return new Promise((resolve, reject) => {
+    const region = 'auto';
+    const service = 's3';
+    const host = `${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+    const now = new Date();
+    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+    const dateStamp = amzDate.slice(0, 8);
+
+    const payload = buffer || Buffer.alloc(0);
+    const payloadHash = sha256Hex(payload);
+    const canonicalUri = `/${R2_BUCKET_NAME}/${key}`;
+    const contentType = 'application/json';
+
+    let canonicalHeaders, signedHeaders;
+    if (method === 'PUT') {
+      canonicalHeaders =
+        `content-type:${contentType}\n` +
+        `host:${host}\n` +
+        `x-amz-content-sha256:${payloadHash}\n` +
+        `x-amz-date:${amzDate}\n`;
+      signedHeaders = 'content-type;host;x-amz-content-sha256;x-amz-date';
+    } else {
+      canonicalHeaders =
+        `host:${host}\n` +
+        `x-amz-content-sha256:${payloadHash}\n` +
+        `x-amz-date:${amzDate}\n`;
+      signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
+    }
+
+    const canonicalRequest = [
+      method, canonicalUri, '', canonicalHeaders, signedHeaders, payloadHash
+    ].join('\n');
+
+    const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+    const stringToSign = [
+      'AWS4-HMAC-SHA256', amzDate, credentialScope, sha256Hex(canonicalRequest)
+    ].join('\n');
+
+    const kDate = hmac('AWS4' + R2_SECRET_ACCESS_KEY, dateStamp);
+    const kRegion = hmac(kDate, region);
+    const kService = hmac(kRegion, service);
+    const kSigning = hmac(kService, 'aws4_request');
+    const signature = hmac(kSigning, stringToSign).toString('hex');
+
+    const authorization = `AWS4-HMAC-SHA256 Credential=${R2_ACCESS_KEY_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    const headers = {
+      'x-amz-content-sha256': payloadHash,
+      'x-amz-date': amzDate,
+      'Authorization': authorization
+    };
+    if (method === 'PUT') {
+      headers['Content-Type'] = contentType;
+      headers['Content-Length'] = payload.length;
+    }
+
+    const options = { method, hostname: host, path: canonicalUri, headers };
+
+    const req = https.request(options, (res) => {
+      const chunks = [];
+      res.on('data', (c) => chunks.push(c));
+      res.on('end', () => {
+        const body = Buffer.concat(chunks);
+        if (res.statusCode >= 200 && res.statusCode < 300) resolve(body);
+        else reject(new Error(`R2 ${method} failed: ${res.statusCode} ${body.toString()}`));
+      });
+    });
+    req.on('error', reject);
+    if (method === 'PUT') req.write(payload);
+    req.end();
+  });
+}
+
+function getFromR2(key) {
+  return r2Request('GET', key, null);
+}
+function putToR2(key, buffer) {
+  return r2Request('PUT', key, buffer);
+}
+
 async function checkAuth(mobile, password) {
   if (mobile === ADMIN_MOBILE && password === ADMIN_PASS) return 'admin';
   if (!mobile || !password) return null;
@@ -193,8 +274,9 @@ async function exportAllData() {
 async function backupNow() {
   const data = await exportAllData();
   const buf = Buffer.from(JSON.stringify(data, null, 2));
-  await uploadToR2(BACKUP_KEY, buf, 'application/json');
-  await uploadToR2(`apnakamra-backups/history/${data.exported_at}.json`, buf, 'application/json');
+  // overwrite latest.json directly via signed R2 API (always fresh, no CDN cache issues)
+  await putToR2(BACKUP_KEY, buf);
+  await putToR2(`apnakamra-backups/history/${data.exported_at}.json`, buf);
   await db.execute({
     sql: `INSERT INTO meta (key, value) VALUES ('last_backup_at', ?)
           ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
@@ -206,7 +288,7 @@ async function backupNow() {
 async function restoreFromBackup() {
   let buf;
   try {
-    buf = await fetchUrl(`${R2_PUBLIC_URL}/${BACKUP_KEY}`);
+    buf = await getFromR2(BACKUP_KEY);
   } catch (e) {
     throw new Error('No backup found on R2 yet. Click "Backup Now" first, then restore can be used after data loss.');
   }
