@@ -20,8 +20,8 @@ const R2_SECRET_ACCESS_KEY = 'b29a65ed0eb4e841cff34edfaa5d4be5fad5e268fef54940c1
 const R2_BUCKET_NAME = 'lms';
 const R2_PUBLIC_URL = 'https://pub-d97a4f82b1804020a1c6d95656eb5649.r2.dev';
 
-const TURSO_DATABASE_URL = 'libsql://apna-kamra-princeguptapg0106.aws-ap-south-1.turso.io';
-const TURSO_AUTH_TOKEN = 'eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODEzMzMxMTUsImlkIjoiMDE5ZWJmYjItMWQwMS03ZjA0LWJhZGMtZDljZjdmNjk0ZjA2IiwicmlkIjoiOTUxNmY1YzctYTRlZi00ZDZhLTg5ZjMtODkyZDIxODUwNTE2In0.8kNCTwkrkpfTbU7i4YXwijC8Igf1mvdiuc9p2gwN4br6-4diu9gWB88aMobARfgTc8yZoxQUqyHcm6bsTpHEDg';
+const TURSO_DATABASE_URL = 'file:lms.db';
+const TURSO_AUTH_TOKEN = undefined;
 
 // ---------------- DATABASE (Turso / libSQL) ----------------
 const db = createClient({
@@ -64,6 +64,10 @@ async function initDatabase() {
       mobile TEXT NOT NULL,
       message TEXT DEFAULT '',
       created_at INTEGER
+    )`,
+    `CREATE TABLE IF NOT EXISTS meta (
+      key TEXT PRIMARY KEY,
+      value TEXT
     )`,
   ], 'write');
   console.log('✅ Turso database initialized');
@@ -150,6 +154,91 @@ async function checkAuth(mobile, password) {
   });
   if (r.rows.length) return 'owner';
   return null;
+}
+
+// ---- fetch a URL's body as a Buffer (used to download backups from R2) ----
+function fetchUrl(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return fetchUrl(res.headers.location).then(resolve, reject);
+      }
+      if (res.statusCode !== 200) return reject(new Error(`Fetch failed: ${res.statusCode}`));
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+    }).on('error', reject);
+  });
+}
+
+// ---------------- BACKUP / RESTORE (logical JSON dump to R2) ----------------
+const BACKUP_KEY = 'apnakamra-backups/latest.json';
+
+async function exportAllData() {
+  const [cities, owners, properties, leads] = await Promise.all([
+    db.execute('SELECT * FROM cities'),
+    db.execute('SELECT * FROM owners'),
+    db.execute('SELECT * FROM properties'),
+    db.execute('SELECT * FROM leads'),
+  ]);
+  return {
+    exported_at: Date.now(),
+    cities: cities.rows,
+    owners: owners.rows,
+    properties: properties.rows,
+    leads: leads.rows,
+  };
+}
+
+async function backupNow() {
+  const data = await exportAllData();
+  const buf = Buffer.from(JSON.stringify(data, null, 2));
+  await uploadToR2(BACKUP_KEY, buf, 'application/json');
+  await uploadToR2(`apnakamra-backups/history/${data.exported_at}.json`, buf, 'application/json');
+  await db.execute({
+    sql: `INSERT INTO meta (key, value) VALUES ('last_backup_at', ?)
+          ON CONFLICT(key) DO UPDATE SET value=excluded.value`,
+    args: [String(data.exported_at)]
+  });
+  return data.exported_at;
+}
+
+async function restoreFromBackup() {
+  let buf;
+  try {
+    buf = await fetchUrl(`${R2_PUBLIC_URL}/${BACKUP_KEY}`);
+  } catch (e) {
+    throw new Error('No backup found on R2 yet. Click "Backup Now" first, then restore can be used after data loss.');
+  }
+  const data = JSON.parse(buf.toString('utf8'));
+
+  const statements = [
+    'DELETE FROM cities', 'DELETE FROM owners', 'DELETE FROM properties', 'DELETE FROM leads'
+  ];
+  await db.batch(statements, 'write');
+
+  const inserts = [];
+  for (const c of data.cities || []) {
+    inserts.push({ sql: 'INSERT INTO cities (id,name,slug,image) VALUES (?,?,?,?)', args: [c.id, c.name, c.slug, c.image] });
+  }
+  for (const o of data.owners || []) {
+    inserts.push({ sql: 'INSERT INTO owners (mobile,password) VALUES (?,?)', args: [o.mobile, o.password] });
+  }
+  for (const p of data.properties || []) {
+    inserts.push({
+      sql: `INSERT INTO properties (id,slug,city_id,name,owner_name,owner_mobile,description,
+              price_single,price_double,price_triple,amenities,images,views,visible,created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      args: [p.id, p.slug, p.city_id, p.name, p.owner_name, p.owner_mobile, p.description,
+        p.price_single, p.price_double, p.price_triple, p.amenities, p.images, p.views, p.visible, p.created_at]
+    });
+  }
+  for (const l of data.leads || []) {
+    inserts.push({ sql: 'INSERT INTO leads (id,name,mobile,message,created_at) VALUES (?,?,?,?,?)', args: [l.id, l.name, l.mobile, l.message, l.created_at] });
+  }
+  if (inserts.length) await db.batch(inserts, 'write');
+
+  return data.exported_at;
 }
 
 function slugify(str) {
@@ -445,6 +534,28 @@ app.delete('/api/admin/leads/:id', asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ---------------- BACKUP / RESTORE ----------------
+app.get('/api/admin/backup-status', asyncHandler(async (req, res) => {
+  const { mobile, password } = req.query;
+  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  const r = await db.execute({ sql: "SELECT value FROM meta WHERE key='last_backup_at'", args: [] });
+  res.json({ last_backup_at: r.rows.length ? Number(r.rows[0].value) : null, backup_url: `${R2_PUBLIC_URL}/${BACKUP_KEY}` });
+}));
+
+app.post('/api/admin/backup', asyncHandler(async (req, res) => {
+  const { mobile, password } = req.body;
+  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  const ts = await backupNow();
+  res.json({ ok: true, last_backup_at: ts });
+}));
+
+app.post('/api/admin/restore', asyncHandler(async (req, res) => {
+  const { mobile, password } = req.body;
+  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  const ts = await restoreFromBackup();
+  res.json({ ok: true, restored_from: ts });
+}));
+
 // ---------------- STATIC PAGES ----------------
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -455,7 +566,12 @@ app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'adm
 
 const PORT = process.env.PORT || 3000;
 initDatabase()
-  .then(() => app.listen(PORT, () => console.log(`Apna Kamra running on port ${PORT}`)))
+  .then(() => {
+    app.listen(PORT, () => console.log(`Apna Kamra running on port ${PORT}`));
+    // Auto-backup: once shortly after startup, then every 60 minutes
+    setTimeout(() => backupNow().then(() => console.log('✅ Initial backup uploaded to R2')).catch(e => console.error('Backup failed:', e.message)), 15000);
+    setInterval(() => backupNow().then(() => console.log('✅ Auto-backup uploaded to R2')).catch(e => console.error('Backup failed:', e.message)), 60 * 60 * 1000);
+  })
   .catch(err => {
     console.error('Failed to initialize database:', err);
     process.exit(1);

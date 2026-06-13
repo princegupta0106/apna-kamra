@@ -57,6 +57,7 @@
       <div class="tab-btn" data-tab="properties">Properties</div>
       <div class="tab-btn" data-tab="owners">Owners</div>
       <div class="tab-btn" data-tab="leads">Leads</div>
+      <div class="tab-btn" data-tab="backups">Backups</div>
     </div>
 
     <!-- CITIES TAB -->
@@ -196,6 +197,23 @@
       </div>
     </div>
 
+    <!-- BACKUPS TAB -->
+    <div class="tab-panel" id="tab-backups">
+      <div class="panel-card">
+        <h3 style="margin-bottom:14px;">Data Backup &amp; Recovery</h3>
+        <p style="color:var(--text-dim); margin-bottom:14px; line-height:1.6;">
+          All cities, properties, owners and leads are automatically backed up to your Cloudflare R2 bucket every hour.
+          You can also trigger a manual backup, or restore the database from the latest backup if data is ever lost.
+        </p>
+        <div class="badge" id="lastBackupBadge" style="margin-bottom:14px;">Loading backup status...</div>
+        <div class="row">
+          <button class="btn btn-solid" id="backupNowBtn">Backup Now</button>
+          <button class="btn btn-danger" id="restoreBtn">Restore Latest Backup</button>
+        </div>
+        <div id="backupMsg" style="margin-top:12px; color:var(--text-dim);"></div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -237,6 +255,7 @@ function showDashboard(){
   loadProps();
   loadOwners();
   loadLeads();
+  loadBackupStatus();
 }
 
 // ---------- TABS ----------
@@ -475,6 +494,49 @@ async function deleteLead(id){
 }
 
 if(auth) showDashboard();
+
+// ---------- BACKUPS ----------
+async function loadBackupStatus(){
+  try{
+    const s = await apiGet(`${API}/admin/backup-status?${authQS()}`);
+    document.getElementById('lastBackupBadge').textContent = s.last_backup_at
+      ? `Last backup: ${new Date(s.last_backup_at).toLocaleString()}`
+      : 'No backup taken yet.';
+  }catch(e){
+    document.getElementById('lastBackupBadge').textContent = 'Could not load backup status.';
+  }
+}
+
+document.getElementById('backupNowBtn').onclick = async ()=>{
+  const msg = document.getElementById('backupMsg');
+  msg.style.color = 'var(--text-dim)';
+  msg.textContent = 'Backing up...';
+  try{
+    await apiSend(API + '/admin/backup', 'POST', {...auth});
+    msg.style.color = '#5ed697';
+    msg.textContent = 'Backup completed successfully.';
+    loadBackupStatus();
+  }catch(e){
+    msg.style.color = '#e57368';
+    msg.textContent = 'Backup failed: ' + e.message;
+  }
+};
+
+document.getElementById('restoreBtn').onclick = async ()=>{
+  if(!confirm('This will REPLACE all current data (cities, properties, owners, leads) with the latest backup. Continue?')) return;
+  const msg = document.getElementById('backupMsg');
+  msg.style.color = 'var(--text-dim)';
+  msg.textContent = 'Restoring...';
+  try{
+    await apiSend(API + '/admin/restore', 'POST', {...auth});
+    msg.style.color = '#5ed697';
+    msg.textContent = 'Data restored successfully. Reloading...';
+    setTimeout(()=>location.reload(), 1200);
+  }catch(e){
+    msg.style.color = '#e57368';
+    msg.textContent = 'Restore failed: ' + e.message;
+  }
+};
 </script>
 </body>
 </html>
