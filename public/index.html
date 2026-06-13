@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Apna Kamra — Find Hostels & PGs</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container inner">
+    <a href="/" class="brand">Apna <span>Kamra</span></a>
+    <div class="nav-links">
+      <button class="btn btn-sm theme-toggle"></button>
+      <a href="/list-property.html" class="btn btn-sm">List Your Property</a>
+    </div>
+  </div>
+</nav>
+
+<div class="hero" style="background-image:url('https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?q=80&w=1600&auto=format&fit=crop')">
+  <div class="hero-content">
+    <h1>Find your next <span>Kamra</span></h1>
+    <p>Apna Kamra is a directory of verified hostels & PGs across cities — compare prices, sharing options and amenities, then call owners directly.</p>
+  </div>
+</div>
+
+<div class="container section">
+  <div class="section-title">Choose your city</div>
+  <div id="cities" class="city-grid">
+    <div class="empty-state">Loading cities...</div>
+  </div>
+</div>
+
+<div class="footer">
+  Apna Kamra — your trusted directory for hostels & PGs.
+  <div class="links">
+    <a href="/list-property.html">List Your Property</a>
+    <a href="/owner">Owner Login</a>
+    <a href="/admin">Admin</a>
+  </div>
+</div>
+
+<script src="/js/main.js"></script>
+<script>
+async function loadCities(){
+  const el = document.getElementById('cities');
+  try{
+    const cities = await apiGet(API + '/cities');
+    if(!cities.length){
+      el.innerHTML = '<div class="empty-state">No cities added yet. Please check back soon.</div>';
+      return;
+    }
+    el.innerHTML = cities.map(c => `
+      <a class="city-card" href="/city/${c.slug}">
+        <img src="${c.image || 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?q=80&w=800&auto=format&fit=crop'}" alt="${c.name}">
+        <div class="overlay">
+          <div>
+            <span>EXPLORE</span>
+            <h3>${c.name}</h3>
+          </div>
+        </div>
+      </a>
+    `).join('');
+  }catch(e){
+    el.innerHTML = '<div class="empty-state">Failed to load cities.</div>';
+  }
+}
+loadCities();
+</script>
+</body>
+</html>

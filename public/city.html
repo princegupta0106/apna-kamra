@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Apna Kamra — Hostels & PGs</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container inner">
+    <a href="/" class="brand">Apna <span>Kamra</span></a>
+    <div class="nav-links">
+      <button class="btn btn-sm theme-toggle"></button>
+      <a href="/list-property.html" class="btn btn-sm">List Your Property</a>
+    </div>
+  </div>
+</nav>
+
+<div class="hero" style="min-height:32vh; background-image:url('https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?q=80&w=1600&auto=format&fit=crop')">
+  <div class="hero-content">
+    <h1 id="cityTitle">Loading...</h1>
+    <p>Browse hostels & PGs, compare prices and amenities, and connect directly with owners.</p>
+  </div>
+</div>
+
+<div class="container section">
+
+  <div class="filterbar">
+    <input type="text" id="searchInput" class="search-input" placeholder="Search by property name...">
+    <select id="sortSelect">
+      <option value="newest">Newest first</option>
+      <option value="price_asc">Price: Low to High</option>
+      <option value="price_desc">Price: High to Low</option>
+      <option value="popular">Most Viewed</option>
+    </select>
+    <button class="btn" id="openFilters">Filters</button>
+  </div>
+
+  <div id="resultCount" class="badge" style="margin-bottom:14px;"></div>
+
+  <div id="props" class="prop-grid">
+    <div class="empty-state">Loading properties...</div>
+  </div>
+</div>
+
+<div class="footer">
+  Apna Kamra — your trusted directory for hostels & PGs.
+  <div class="links">
+    <a href="/list-property.html">List Your Property</a>
+    <a href="/owner">Owner Login</a>
+    <a href="/admin">Admin</a>
+  </div>
+</div>
+
+<!-- Filters Drawer -->
+<div class="drawer-overlay" id="overlay"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-head">
+    <strong>Filters</strong>
+    <button class="close-x" id="closeDrawer">&times;</button>
+  </div>
+  <div class="drawer-body">
+    <div>
+      <div class="field-label">Price Range (₹/month)</div>
+      <div class="range-row">
+        <input type="number" id="minPrice" placeholder="Min">
+        <input type="number" id="maxPrice" placeholder="Max">
+      </div>
+    </div>
+    <div>
+      <div class="field-label">Amenities</div>
+      <div class="checkbox-grid" id="amenityList"></div>
+    </div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn btn-ghost btn-block" id="clearFilters">Clear</button>
+    <button class="btn btn-solid btn-block" id="applyFilters">Apply Filters</button>
+  </div>
+</div>
+
+<script src="/js/main.js"></script>
+<script>
+const citySlug = location.pathname.split('/').pop();
+let currentFilters = { minPrice:'', maxPrice:'', amenities:[] };
+
+// build amenity checkboxes
+document.getElementById('amenityList').innerHTML = AMENITIES.map(a=>`
+  <label><input type="checkbox" value="${a}" class="amen-cb"> ${a}</label>
+`).join('');
+
+async function loadCityInfo(){
+  try{
+    const cities = await apiGet(API + '/cities');
+    const city = cities.find(c=>c.slug === citySlug);
+    document.getElementById('cityTitle').innerHTML = city
+      ? `Hostels & PGs in <span>${city.name}</span>`
+      : 'City not found';
+    if(city && city.image){
+      document.querySelector('.hero').style.backgroundImage = `url('${city.image}')`;
+    }
+  }catch(e){}
+}
+
+function buildQuery(){
+  const params = new URLSearchParams();
+  params.set('city', citySlug);
+  const q = document.getElementById('searchInput').value.trim();
+  if(q) params.set('q', q);
+  params.set('sort', document.getElementById('sortSelect').value);
+  if(currentFilters.minPrice) params.set('minPrice', currentFilters.minPrice);
+  if(currentFilters.maxPrice) params.set('maxPrice', currentFilters.maxPrice);
+  if(currentFilters.amenities.length) params.set('amenities', currentFilters.amenities.join(','));
+  return params.toString();
+}
+
+async function loadProps(){
+  const el = document.getElementById('props');
+  el.innerHTML = '<div class="empty-state">Loading properties...</div>';
+  try{
+    const rows = await apiGet(`${API}/properties?${buildQuery()}`);
+    document.getElementById('resultCount').textContent = `${rows.length} properties found`;
+    if(!rows.length){
+      el.innerHTML = '<div class="empty-state">No properties match your filters. Try adjusting them.</div>';
+      return;
+    }
+    el.innerHTML = rows.map(p => `
+      <a class="prop-card" href="/property/${p.slug}" data-pid="${p.id}">
+        <div class="img-wrap">
+          <img src="${(p.images && p.images[0]) || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=900&auto=format&fit=crop'}" alt="${p.name}">
+        </div>
+        <div class="body">
+          <h3>${p.name}</h3>
+          <div class="loc">${p.city_name}</div>
+          <div class="amenity-tags">${amenityTags(p.amenities, 3)}</div>
+          <div class="price-row">
+            <span class="price">${fmtPrice(p.lowest_price)}</span>
+            <span class="from">/ month onwards</span>
+          </div>
+        </div>
+      </a>
+    `).join('');
+
+    // observe for impressions
+    document.querySelectorAll('[data-pid]').forEach(el=>ImpressionTracker.observe(el));
+  }catch(e){
+    el.innerHTML = '<div class="empty-state">Failed to load properties.</div>';
+  }
+}
+
+// drawer logic
+const drawer = document.getElementById('drawer');
+const overlay = document.getElementById('overlay');
+document.getElementById('openFilters').onclick = ()=>{ drawer.classList.add('open'); overlay.classList.add('open'); };
+document.getElementById('closeDrawer').onclick = closeDrawer;
+overlay.onclick = closeDrawer;
+function closeDrawer(){ drawer.classList.remove('open'); overlay.classList.remove('open'); }
+
+document.getElementById('applyFilters').onclick = ()=>{
+  currentFilters.minPrice = document.getElementById('minPrice').value;
+  currentFilters.maxPrice = document.getElementById('maxPrice').value;
+  currentFilters.amenities = Array.from(document.querySelectorAll('.amen-cb:checked')).map(c=>c.value);
+  closeDrawer();
+  loadProps();
+};
+
+document.getElementById('clearFilters').onclick = ()=>{
+  document.getElementById('minPrice').value = '';
+  document.getElementById('maxPrice').value = '';
+  document.querySelectorAll('.amen-cb').forEach(c=>c.checked=false);
+  currentFilters = { minPrice:'', maxPrice:'', amenities:[] };
+  loadProps();
+};
+
+document.getElementById('sortSelect').onchange = loadProps;
+let searchTimer;
+document.getElementById('searchInput').oninput = ()=>{
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(loadProps, 400);
+};
+
+loadCityInfo();
+loadProps();
+</script>
+</body>
+</html>

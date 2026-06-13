@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>List Your Property — Apna Kamra</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container inner">
+    <a href="/" class="brand">Apna <span>Kamra</span></a>
+    <div class="nav-links">
+      <button class="btn btn-sm theme-toggle"></button>
+      <a href="/" class="btn btn-sm btn-ghost">Home</a>
+    </div>
+  </div>
+</nav>
+
+<div class="hero" style="min-height:30vh; background-image:url('https://images.unsplash.com/photo-1568084680786-a84f91d1153c?q=80&w=1600&auto=format&fit=crop')">
+  <div class="hero-content">
+    <h1>List Your <span>Property</span></h1>
+    <p>Own a hostel or PG? Get listed on Apna Kamra and reach more students & professionals.</p>
+  </div>
+</div>
+
+<div class="container section" style="max-width:560px;">
+  <div class="panel-card">
+    <form id="leadForm">
+      <div class="form-grid">
+        <div class="full">
+          <label>Your Name</label>
+          <input type="text" id="name" placeholder="e.g. Rohit Sharma">
+        </div>
+        <div class="full">
+          <label>Mobile Number *</label>
+          <input type="tel" id="mobile" placeholder="10-digit mobile number" required>
+        </div>
+        <div class="full">
+          <label>Tell us about your property</label>
+          <textarea id="message" rows="4" placeholder="City, locality, number of rooms, etc."></textarea>
+        </div>
+      </div>
+      <button type="submit" class="btn btn-solid btn-block" style="margin-top:18px;">Submit Request</button>
+      <div id="msg" style="margin-top:14px; text-align:center; color:var(--text-dim);"></div>
+    </form>
+  </div>
+</div>
+
+<div class="footer">
+  Apna Kamra — your trusted directory for hostels & PGs.
+  <div class="links">
+    <a href="/list-property.html">List Your Property</a>
+    <a href="/owner">Owner Login</a>
+    <a href="/admin">Admin</a>
+  </div>
+</div>
+
+<script src="/js/main.js"></script>
+<script>
+document.getElementById('leadForm').onsubmit = async (e)=>{
+  e.preventDefault();
+  const msgEl = document.getElementById('msg');
+  const mobile = document.getElementById('mobile').value.trim();
+  if(!/^[0-9]{10}$/.test(mobile)){
+    msgEl.style.color = '#e57368';
+    msgEl.textContent = 'Please enter a valid 10-digit mobile number.';
+    return;
+  }
+  try{
+    await apiSend(API + '/leads', 'POST', {
+      name: document.getElementById('name').value.trim(),
+      mobile,
+      message: document.getElementById('message').value.trim()
+    });
+    msgEl.style.color = '#5ed697';
+    msgEl.textContent = 'Thanks! Our team will contact you shortly.';
+    document.getElementById('leadForm').reset();
+  }catch(e){
+    msgEl.style.color = '#e57368';
+    msgEl.textContent = 'Something went wrong. Please try again.';
+  }
+};
+</script>
+</body>
+</html>

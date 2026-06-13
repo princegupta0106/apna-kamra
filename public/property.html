@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Apna Kamra — Property</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container inner">
+    <a href="/" class="brand">Apna <span>Kamra</span></a>
+    <div class="nav-links">
+      <button class="btn btn-sm theme-toggle"></button>
+      <a href="/list-property.html" class="btn btn-sm">List Your Property</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container section" id="content">
+  <div class="empty-state">Loading property...</div>
+</div>
+
+<div class="footer">
+  Apna Kamra — your trusted directory for hostels & PGs.
+  <div class="links">
+    <a href="/list-property.html">List Your Property</a>
+    <a href="/owner">Owner Login</a>
+    <a href="/admin">Admin</a>
+  </div>
+</div>
+
+<script src="/js/main.js"></script>
+<script>
+const slug = location.pathname.split('/').pop();
+
+async function load(){
+  const el = document.getElementById('content');
+  try{
+    const p = await apiGet(`${API}/properties/${slug}`);
+    document.title = `${p.name} — Apna Kamra`;
+
+    const images = p.images && p.images.length ? p.images : ['https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=1200&auto=format&fit=crop'];
+
+    el.innerHTML = `
+      <div style="margin-bottom:14px;">
+        <a href="/city/${p.city_slug}" class="badge">&larr; Back to ${p.city_name}</a>
+      </div>
+
+      <div class="gallery">
+        ${images.map(img => `<img src="${img}" alt="${p.name}">`).join('')}
+      </div>
+
+      <div style="margin-top:20px;">
+        <h1 style="font-size:26px;">${p.name}</h1>
+        <div class="loc" style="margin-top:6px;">${p.city_name}${p.owner_name ? ' • Managed by ' + p.owner_name : ''}</div>
+      </div>
+
+      <div class="price-box">
+        <div class="pbox">
+          <div class="label">Single Sharing</div>
+          <div class="val">${fmtPrice(p.price_single)}</div>
+        </div>
+        <div class="pbox">
+          <div class="label">Double Sharing</div>
+          <div class="val">${fmtPrice(p.price_double)}</div>
+        </div>
+        <div class="pbox">
+          <div class="label">Triple Sharing</div>
+          <div class="val">${fmtPrice(p.price_triple)}</div>
+        </div>
+      </div>
+
+      <div class="section-title" style="font-size:18px;">Amenities</div>
+      <div class="amenity-tags">${amenityTags(p.amenities)}</div>
+
+      <div class="section-title" style="font-size:18px; margin-top:24px;">About this property</div>
+      <p style="color:var(--text-dim); line-height:1.7;">${p.description ? p.description.replace(/\n/g,'<br>') : 'No description provided.'}</p>
+
+      <div class="contact-box">
+        <div style="color:var(--text-dim); font-size:14px;">Interested in this property?</div>
+        <button class="btn btn-solid" id="showContactBtn" style="margin-top:10px;">Show Contact Number</button>
+        <div id="contactResult"></div>
+      </div>
+    `;
+
+    // count impression instantly for detail view
+    ImpressionTracker.markNow(p.id);
+
+    document.getElementById('showContactBtn').onclick = async ()=>{
+      try{
+        const c = await apiGet(`${API}/properties/${slug}/contact`);
+        document.getElementById('showContactBtn').style.display='none';
+        document.getElementById('contactResult').innerHTML = `
+          <div class="contact-number">${c.owner_mobile || 'Not available'}</div>
+          ${c.owner_mobile ? `<a class="btn btn-solid" style="margin-top:10px;" href="tel:${c.owner_mobile}">Call Now</a>` : ''}
+        `;
+      }catch(e){
+        document.getElementById('contactResult').innerHTML = '<div style="color:var(--text-dim); margin-top:10px;">Could not load contact.</div>';
+      }
+    };
+
+  }catch(e){
+    el.innerHTML = '<div class="empty-state">Property not found.</div>';
+  }
+}
+load();
+</script>
+</body>
+</html>

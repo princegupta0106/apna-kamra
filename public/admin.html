@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Panel — Apna Kamra</title>
+<link rel="stylesheet" href="/css/style.css">
+<style>
+.tabs{ display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap; }
+.tab-btn{
+  padding:10px 16px; border-radius: var(--radius); border:1px solid var(--card-border);
+  background: var(--card); color: var(--text-dim); cursor:pointer; font-size:14px; font-weight:600;
+}
+.tab-btn.active{ border-color: var(--accent); color: var(--accent); }
+.tab-panel{ display:none; }
+.tab-panel.active{ display:block; }
+.row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="container inner">
+    <a href="/" class="brand">Apna <span>Kamra</span></a>
+    <div class="nav-links">
+      <button class="btn btn-sm theme-toggle"></button>
+      <span id="adminLabel" style="color:var(--text-dim); font-size:13px;"></span>
+      <button class="btn btn-sm btn-ghost" id="logoutBtn" style="display:none;">Logout</button>
+    </div>
+  </div>
+</nav>
+
+<div class="container section">
+
+  <!-- LOGIN -->
+  <div id="loginBox" class="panel-card" style="max-width:420px; margin:40px auto;">
+    <h2 style="margin-bottom:18px;">Super Admin Login</h2>
+    <div class="form-grid">
+      <div class="full">
+        <label>Mobile Number</label>
+        <input type="tel" id="loginMobile" placeholder="Admin mobile number">
+      </div>
+      <div class="full">
+        <label>Password</label>
+        <input type="password" id="loginPass" placeholder="Password">
+      </div>
+    </div>
+    <button class="btn btn-solid btn-block" id="loginBtn" style="margin-top:16px;">Login</button>
+    <div id="loginMsg" style="margin-top:12px; color:#e57368; text-align:center;"></div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard" style="display:none;">
+
+    <div class="tabs">
+      <div class="tab-btn active" data-tab="cities">Cities</div>
+      <div class="tab-btn" data-tab="properties">Properties</div>
+      <div class="tab-btn" data-tab="owners">Owners</div>
+      <div class="tab-btn" data-tab="leads">Leads</div>
+    </div>
+
+    <!-- CITIES TAB -->
+    <div class="tab-panel active" id="tab-cities">
+      <div class="panel-card" style="margin-bottom:20px;">
+        <h3 style="margin-bottom:14px;">Add City</h3>
+        <div class="form-grid">
+          <div>
+            <label>City Name</label>
+            <input type="text" id="city_name" placeholder="e.g. Jaipur">
+          </div>
+          <div>
+            <label>City Image</label>
+            <input type="file" id="city_imageUpload" accept="image/*">
+          </div>
+          <div class="full">
+            <div class="thumb-row" id="city_image_preview"></div>
+          </div>
+        </div>
+        <button class="btn btn-solid" id="addCityBtn" style="margin-top:14px;">Add City</button>
+        <div id="cityMsg" style="margin-top:10px; color:var(--text-dim);"></div>
+      </div>
+      <div class="panel-card">
+        <h3 style="margin-bottom:14px;">All Cities</h3>
+        <table>
+          <thead><tr><th>Image</th><th>Name</th><th>Slug</th><th></th></tr></thead>
+          <tbody id="citiesTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PROPERTIES TAB -->
+    <div class="tab-panel" id="tab-properties">
+      <div class="panel-card" style="margin-bottom:20px;">
+        <h3 style="margin-bottom:14px;" id="propFormTitle">Add Property</h3>
+        <input type="hidden" id="p_id">
+        <div class="form-grid">
+          <div class="full">
+            <label>Property Name</label>
+            <input type="text" id="p_name" placeholder="e.g. Sunrise Boys Hostel">
+          </div>
+          <div>
+            <label>City</label>
+            <select id="p_city"></select>
+          </div>
+          <div>
+            <label>Visible on site?</label>
+            <select id="p_visible">
+              <option value="1">Visible</option>
+              <option value="0">Hidden</option>
+            </select>
+          </div>
+          <div>
+            <label>Owner Name</label>
+            <input type="text" id="p_owner_name" placeholder="e.g. Rohit Sharma">
+          </div>
+          <div>
+            <label>Owner Mobile Number</label>
+            <input type="tel" id="p_owner_mobile" placeholder="10-digit mobile">
+          </div>
+          <div class="full">
+            <label>Description</label>
+            <textarea id="p_description" rows="4"></textarea>
+          </div>
+          <div>
+            <label>Price - Single Sharing (₹/month)</label>
+            <input type="number" id="p_price_single">
+          </div>
+          <div>
+            <label>Price - Double Sharing (₹/month)</label>
+            <input type="number" id="p_price_double">
+          </div>
+          <div>
+            <label>Price - Triple Sharing (₹/month)</label>
+            <input type="number" id="p_price_triple">
+          </div>
+          <div class="full">
+            <label>Amenities</label>
+            <div class="checkbox-grid" id="p_amenities"></div>
+          </div>
+          <div class="full">
+            <label>Images</label>
+            <input type="file" id="p_imageUpload" accept="image/*" multiple>
+            <div class="thumb-row" id="p_images"></div>
+          </div>
+        </div>
+        <div class="row" style="margin-top:14px;">
+          <button class="btn btn-solid" id="savePropBtn">Save Property</button>
+          <button class="btn btn-ghost" id="resetPropBtn">Reset Form</button>
+        </div>
+        <div id="propMsg" style="margin-top:10px; color:var(--text-dim);"></div>
+      </div>
+
+      <div class="panel-card">
+        <h3 style="margin-bottom:14px;">All Properties</h3>
+        <table>
+          <thead><tr><th>Name</th><th>City</th><th>Owner</th><th>Lowest Price</th><th>Views</th><th>Status</th><th></th></tr></thead>
+          <tbody id="propsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- OWNERS TAB -->
+    <div class="tab-panel" id="tab-owners">
+      <div class="panel-card" style="margin-bottom:20px;">
+        <h3 style="margin-bottom:14px;">Create Owner Login</h3>
+        <div class="form-grid">
+          <div>
+            <label>Owner Mobile Number</label>
+            <input type="tel" id="o_mobile" placeholder="10-digit mobile">
+          </div>
+          <div>
+            <label>Password</label>
+            <input type="text" id="o_password" placeholder="Set password">
+          </div>
+        </div>
+        <button class="btn btn-solid" id="addOwnerBtn" style="margin-top:14px;">Create Owner</button>
+        <div id="ownerMsg" style="margin-top:10px; color:var(--text-dim);"></div>
+      </div>
+      <div class="panel-card">
+        <h3 style="margin-bottom:14px;">All Owners</h3>
+        <table>
+          <thead><tr><th>Mobile</th><th></th></tr></thead>
+          <tbody id="ownersTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- LEADS TAB -->
+    <div class="tab-panel" id="tab-leads">
+      <div class="panel-card">
+        <h3 style="margin-bottom:14px;">"List Your Property" Requests</h3>
+        <table>
+          <thead><tr><th>Name</th><th>Mobile</th><th>Message</th><th>Date</th><th></th></tr></thead>
+          <tbody id="leadsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="/js/main.js"></script>
+<script>
+let auth = JSON.parse(sessionStorage.getItem('ak_admin') || 'null');
+let allCities = [];
+let allProps = [];
+let propImages = [];
+
+function authQS(){ return `mobile=${auth.mobile}&password=${encodeURIComponent(auth.password)}`; }
+
+document.getElementById('loginBtn').onclick = async ()=>{
+  const mobile = document.getElementById('loginMobile').value.trim();
+  const password = document.getElementById('loginPass').value;
+  try{
+    await apiSend(API + '/admin/login', 'POST', {mobile,password});
+    auth = {mobile,password};
+    sessionStorage.setItem('ak_admin', JSON.stringify(auth));
+    showDashboard();
+  }catch(e){
+    document.getElementById('loginMsg').textContent = 'Invalid credentials.';
+  }
+};
+document.getElementById('logoutBtn').onclick = ()=>{ sessionStorage.removeItem('ak_admin'); location.reload(); };
+
+function showDashboard(){
+  document.getElementById('loginBox').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  document.getElementById('adminLabel').textContent = `Super Admin (${auth.mobile})`;
+  document.getElementById('logoutBtn').style.display = 'inline-flex';
+
+  // amenity checkboxes for property form
+  document.getElementById('p_amenities').innerHTML = AMENITIES.map(a=>`
+    <label><input type="checkbox" value="${a}" class="p-amen-cb"> ${a}</label>
+  `).join('');
+
+  loadCities();
+  loadProps();
+  loadOwners();
+  loadLeads();
+}
+
+// ---------- TABS ----------
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.onclick = ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-'+btn.dataset.tab).classList.add('active');
+  };
+});
+
+// ---------- CITIES ----------
+let cityImageUrl = '';
+document.getElementById('city_imageUpload').onchange = async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const fd = new FormData(); fd.append('file', file);
+  const res = await fetch(`${API}/upload?${authQS()}`, {method:'POST', body:fd});
+  const data = await res.json();
+  if(data.url){
+    cityImageUrl = data.url;
+    document.getElementById('city_image_preview').innerHTML = `<div class="thumb"><img src="${data.url}"></div>`;
+  }
+};
+
+document.getElementById('addCityBtn').onclick = async ()=>{
+  const name = document.getElementById('city_name').value.trim();
+  if(!name) return;
+  try{
+    await apiSend(API + '/cities', 'POST', {...auth, name, image: cityImageUrl});
+    document.getElementById('cityMsg').style.color = '#5ed697';
+    document.getElementById('cityMsg').textContent = 'City added.';
+    document.getElementById('city_name').value = '';
+    cityImageUrl = '';
+    document.getElementById('city_image_preview').innerHTML = '';
+    loadCities();
+  }catch(e){
+    document.getElementById('cityMsg').style.color = '#e57368';
+    document.getElementById('cityMsg').textContent = 'Failed: ' + e.message;
+  }
+};
+
+async function loadCities(){
+  allCities = await apiGet(API + '/cities');
+  document.getElementById('citiesTable').innerHTML = allCities.map(c=>`
+    <tr>
+      <td><div class="thumb" style="width:50px;height:50px;"><img src="${c.image || ''}"></div></td>
+      <td>${c.name}</td>
+      <td>${c.slug}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="deleteCity(${c.id})">Delete</button></td>
+    </tr>
+  `).join('');
+
+  // populate property city select
+  document.getElementById('p_city').innerHTML = allCities.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+}
+async function deleteCity(id){
+  if(!confirm('Delete this city? Properties in this city will remain but lose their city link.')) return;
+  await apiSend(API + `/cities/${id}?${authQS()}`, 'DELETE', {});
+  loadCities();
+}
+
+// ---------- PROPERTIES ----------
+document.getElementById('p_imageUpload').onchange = async (e)=>{
+  const files = Array.from(e.target.files);
+  for(const file of files){
+    const fd = new FormData(); fd.append('file', file);
+    const res = await fetch(`${API}/upload?${authQS()}`, {method:'POST', body:fd});
+    const data = await res.json();
+    if(data.url) propImages.push(data.url);
+  }
+  renderPropImages();
+  e.target.value = '';
+};
+function renderPropImages(){
+  document.getElementById('p_images').innerHTML = propImages.map((url,i)=>`
+    <div class="thumb"><img src="${url}"><button class="rm" onclick="removePropImg(${i})">&times;</button></div>
+  `).join('');
+}
+function removePropImg(i){ propImages.splice(i,1); renderPropImages(); }
+
+document.getElementById('resetPropBtn').onclick = resetPropForm;
+function resetPropForm(){
+  document.getElementById('p_id').value = '';
+  document.getElementById('p_name').value = '';
+  document.getElementById('p_owner_name').value = '';
+  document.getElementById('p_owner_mobile').value = '';
+  document.getElementById('p_description').value = '';
+  document.getElementById('p_price_single').value = '';
+  document.getElementById('p_price_double').value = '';
+  document.getElementById('p_price_triple').value = '';
+  document.getElementById('p_visible').value = '1';
+  document.querySelectorAll('.p-amen-cb').forEach(c=>c.checked=false);
+  propImages = [];
+  renderPropImages();
+  document.getElementById('propFormTitle').textContent = 'Add Property';
+}
+
+document.getElementById('savePropBtn').onclick = async ()=>{
+  const id = document.getElementById('p_id').value;
+  const amenities = Array.from(document.querySelectorAll('.p-amen-cb:checked')).map(c=>c.value);
+  const payload = {
+    ...auth,
+    name: document.getElementById('p_name').value.trim(),
+    city_id: Number(document.getElementById('p_city').value),
+    owner_name: document.getElementById('p_owner_name').value.trim(),
+    owner_mobile: document.getElementById('p_owner_mobile').value.trim(),
+    description: document.getElementById('p_description').value.trim(),
+    price_single: Number(document.getElementById('p_price_single').value)||0,
+    price_double: Number(document.getElementById('p_price_double').value)||0,
+    price_triple: Number(document.getElementById('p_price_triple').value)||0,
+    visible: Number(document.getElementById('p_visible').value),
+    amenities, images: propImages
+  };
+  if(!payload.name || !payload.city_id){
+    document.getElementById('propMsg').style.color = '#e57368';
+    document.getElementById('propMsg').textContent = 'Name and City are required.';
+    return;
+  }
+  try{
+    if(id){
+      await apiSend(`${API}/properties/${id}`, 'PUT', payload);
+    }else{
+      await apiSend(API + '/properties', 'POST', payload);
+    }
+    document.getElementById('propMsg').style.color = '#5ed697';
+    document.getElementById('propMsg').textContent = 'Saved successfully.';
+    resetPropForm();
+    loadProps();
+  }catch(e){
+    document.getElementById('propMsg').style.color = '#e57368';
+    document.getElementById('propMsg').textContent = 'Failed: ' + e.message;
+  }
+};
+
+async function loadProps(){
+  allProps = await apiGet(`${API}/admin/properties?${authQS()}`);
+  document.getElementById('propsTable').innerHTML = allProps.map(p=>`
+    <tr>
+      <td>${p.name}</td>
+      <td>${p.city_name}</td>
+      <td>${p.owner_name || '—'}${p.owner_mobile ? ' ('+p.owner_mobile+')' : ''}</td>
+      <td>${fmtPrice(p.lowest_price)}</td>
+      <td>${p.views}</td>
+      <td>${p.visible ? '<span class="badge visible-badge">Visible</span>' : '<span class="badge hidden-badge">Hidden</span>'}</td>
+      <td class="row">
+        <button class="btn btn-sm" onclick="editProp(${p.id})">Edit</button>
+        <button class="btn btn-sm btn-ghost" onclick="toggleVisible(${p.id}, ${p.visible})">${p.visible ? 'Hide' : 'Show'}</button>
+        <a class="btn btn-sm btn-ghost" href="/property/${p.slug}" target="_blank">View</a>
+        <button class="btn btn-sm btn-danger" onclick="deleteProp(${p.id})">Delete</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function editProp(id){
+  const p = allProps.find(x=>x.id===id);
+  document.getElementById('p_id').value = p.id;
+  document.getElementById('p_name').value = p.name;
+  document.getElementById('p_city').value = p.city_id;
+  document.getElementById('p_visible').value = p.visible;
+  document.getElementById('p_owner_name').value = p.owner_name || '';
+  document.getElementById('p_owner_mobile').value = p.owner_mobile || '';
+  document.getElementById('p_description').value = p.description || '';
+  document.getElementById('p_price_single').value = p.price_single || '';
+  document.getElementById('p_price_double').value = p.price_double || '';
+  document.getElementById('p_price_triple').value = p.price_triple || '';
+  document.querySelectorAll('.p-amen-cb').forEach(c=> c.checked = p.amenities.includes(c.value));
+  propImages = [...(p.images || [])];
+  renderPropImages();
+  document.getElementById('propFormTitle').textContent = 'Edit Property: ' + p.name;
+  document.querySelector('[data-tab="properties"]').click();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+async function toggleVisible(id, current){
+  await apiSend(`${API}/properties/${id}`, 'PUT', {...auth, visible: current ? 0 : 1});
+  loadProps();
+}
+async function deleteProp(id){
+  if(!confirm('Delete this property permanently?')) return;
+  await apiSend(`${API}/properties/${id}?${authQS()}`, 'DELETE', {});
+  loadProps();
+}
+
+// ---------- OWNERS ----------
+document.getElementById('addOwnerBtn').onclick = async ()=>{
+  const new_mobile = document.getElementById('o_mobile').value.trim();
+  const new_password = document.getElementById('o_password').value;
+  if(!/^[0-9]{10}$/.test(new_mobile) || !new_password){
+    document.getElementById('ownerMsg').style.color = '#e57368';
+    document.getElementById('ownerMsg').textContent = 'Enter valid 10-digit mobile and password.';
+    return;
+  }
+  try{
+    await apiSend(API + '/admin/owners', 'POST', {...auth, new_mobile, new_password});
+    document.getElementById('ownerMsg').style.color = '#5ed697';
+    document.getElementById('ownerMsg').textContent = 'Owner created.';
+    document.getElementById('o_mobile').value = '';
+    document.getElementById('o_password').value = '';
+    loadOwners();
+  }catch(e){
+    document.getElementById('ownerMsg').style.color = '#e57368';
+    document.getElementById('ownerMsg').textContent = 'Failed: ' + e.message;
+  }
+};
+async function loadOwners(){
+  const owners = await apiGet(`${API}/admin/owners?${authQS()}`);
+  document.getElementById('ownersTable').innerHTML = owners.map(o=>`
+    <tr><td>${o.mobile}</td><td><button class="btn btn-sm btn-danger" onclick="deleteOwner('${o.mobile}')">Delete</button></td></tr>
+  `).join('');
+}
+async function deleteOwner(mobile){
+  if(!confirm('Delete this owner login?')) return;
+  await apiSend(`${API}/admin/owners/${mobile}?${authQS()}`, 'DELETE', {});
+  loadOwners();
+}
+
+// ---------- LEADS ----------
+async function loadLeads(){
+  const leads = await apiGet(`${API}/admin/leads?${authQS()}`);
+  document.getElementById('leadsTable').innerHTML = leads.length ? leads.map(l=>`
+    <tr>
+      <td>${l.name || '—'}</td>
+      <td>${l.mobile}</td>
+      <td>${l.message || '—'}</td>
+      <td>${new Date(l.created_at).toLocaleString()}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="deleteLead(${l.id})">Delete</button></td>
+    </tr>
+  `).join('') : `<tr><td colspan="5" style="text-align:center; color:var(--text-dim);">No requests yet.</td></tr>`;
+}
+async function deleteLead(id){
+  await apiSend(`${API}/admin/leads/${id}?${authQS()}`, 'DELETE', {});
+  loadLeads();
+}
+
+if(auth) showDashboard();
+</script>
+</body>
+</html>
