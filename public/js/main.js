@@ -5,7 +5,7 @@ const AMENITIES = [
   "Lift", "Daily Cleaning"
 ];
 
-const API_BASE = 'https://apna-kamra.up.railway.app';
+const API_BASE = 'https://apna-kamra-production.up.railway.app';
 const API = API_BASE + '/api';
 
 async function apiGet(url){
