@@ -226,6 +226,76 @@ function putToR2(key, buffer) {
   return r2Request('PUT', key, buffer);
 }
 
+// ---- List objects in R2 bucket (signed ListObjectsV2) ----
+function listR2(prefix) {
+  return new Promise((resolve, reject) => {
+    const region = 'auto';
+    const service = 's3';
+    const host = `${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`;
+    const now = new Date();
+    const amzDate = now.toISOString().replace(/[:-]|\.\d{3}/g, '');
+    const dateStamp = amzDate.slice(0, 8);
+    const payloadHash = sha256Hex(Buffer.alloc(0));
+
+    const queryParams = { 'list-type': '2', 'prefix': prefix, 'max-keys': '200' };
+    const canonicalQueryString = Object.keys(queryParams).sort()
+      .map(k => `${encodeURIComponent(k)}=${encodeURIComponent(queryParams[k])}`)
+      .join('&');
+
+    const canonicalUri = `/${R2_BUCKET_NAME}`;
+    const canonicalHeaders = `host:${host}\nx-amz-content-sha256:${payloadHash}\nx-amz-date:${amzDate}\n`;
+    const signedHeaders = 'host;x-amz-content-sha256;x-amz-date';
+
+    const canonicalRequest = [
+      'GET', canonicalUri, canonicalQueryString, canonicalHeaders, signedHeaders, payloadHash
+    ].join('\n');
+
+    const credentialScope = `${dateStamp}/${region}/${service}/aws4_request`;
+    const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credentialScope, sha256Hex(canonicalRequest)].join('\n');
+
+    const kDate = hmac('AWS4' + R2_SECRET_ACCESS_KEY, dateStamp);
+    const kRegion = hmac(kDate, region);
+    const kService = hmac(kRegion, service);
+    const kSigning = hmac(kService, 'aws4_request');
+    const signature = hmac(kSigning, stringToSign).toString('hex');
+
+    const authorization = `AWS4-HMAC-SHA256 Credential=${R2_ACCESS_KEY_ID}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+
+    const options = {
+      method: 'GET',
+      hostname: host,
+      path: `${canonicalUri}?${canonicalQueryString}`,
+      headers: {
+        'x-amz-content-sha256': payloadHash,
+        'x-amz-date': amzDate,
+        'Authorization': authorization
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf8');
+        if (res.statusCode < 200 || res.statusCode >= 300) return reject(new Error(`R2 list failed: ${res.statusCode} ${body}`));
+        const items = [];
+        const contentsRegex = /<Contents>([\s\S]*?)<\/Contents>/g;
+        let m;
+        while ((m = contentsRegex.exec(body))) {
+          const block = m[1];
+          const key = (block.match(/<Key>(.*?)<\/Key>/) || [])[1];
+          const size = (block.match(/<Size>(.*?)<\/Size>/) || [])[1];
+          const lastModified = (block.match(/<LastModified>(.*?)<\/LastModified>/) || [])[1];
+          if (key) items.push({ key, size: Number(size) || 0, last_modified: lastModified });
+        }
+        resolve(items);
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 async function checkAuth(mobile, password) {
   if (mobile === ADMIN_MOBILE && password === ADMIN_PASS) return 'admin';
   if (!mobile || !password) return null;
@@ -285,10 +355,11 @@ async function backupNow() {
   return data.exported_at;
 }
 
-async function restoreFromBackup() {
+async function restoreFromBackup(key) {
+  const backupKey = key || BACKUP_KEY;
   let buf;
   try {
-    buf = await getFromR2(BACKUP_KEY);
+    buf = await getFromR2(backupKey);
   } catch (e) {
     throw new Error('No backup found on R2 yet. Click "Backup Now" first, then restore can be used after data loss.');
   }
@@ -518,6 +589,7 @@ app.put('/api/properties/:id', asyncHandler(async (req, res) => {
     if (d.owner_mobile !== undefined) { sets.push('owner_mobile=?'); args.push(d.owner_mobile); }
     if (d.city_id !== undefined) { sets.push('city_id=?'); args.push(Number(d.city_id)); }
     if (d.visible !== undefined) { sets.push('visible=?'); args.push(Number(d.visible)); }
+    if (d.views !== undefined) { sets.push('views=?'); args.push(Number(d.views) || 0); }
   }
 
   if (!sets.length) return res.json({ ok: true });
@@ -631,10 +703,19 @@ app.post('/api/admin/backup', asyncHandler(async (req, res) => {
   res.json({ ok: true, last_backup_at: ts });
 }));
 
-app.post('/api/admin/restore', asyncHandler(async (req, res) => {
-  const { mobile, password } = req.body;
+app.get('/api/admin/backups', asyncHandler(async (req, res) => {
+  const { mobile, password } = req.query;
   if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
-  const ts = await restoreFromBackup();
+  let items = [];
+  try { items = await listR2('apnakamra-backups/history/'); } catch (e) { items = []; }
+  items.sort((a, b) => new Date(b.last_modified) - new Date(a.last_modified));
+  res.json({ backups: items });
+}));
+
+app.post('/api/admin/restore', asyncHandler(async (req, res) => {
+  const { mobile, password, key } = req.body;
+  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  const ts = await restoreFromBackup(key);
   res.json({ ok: true, restored_from: ts });
 }));
 
@@ -648,11 +729,32 @@ app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'adm
 
 const PORT = process.env.PORT || 3000;
 initDatabase()
-  .then(() => {
+  .then(async () => {
+    // If the local DB is empty (fresh deploy), try restoring from the last R2 backup
+    try {
+      const r = await db.execute('SELECT COUNT(*) as c FROM properties');
+      const count = Number(r.rows[0].c || 0);
+      if (count === 0) {
+        const ts = await restoreFromBackup();
+        console.log(`✅ Restored data from latest backup (taken ${new Date(ts).toLocaleString()})`);
+      }
+    } catch (e) {
+      console.log('ℹ️  No existing backup to restore from yet:', e.message);
+    }
+
     app.listen(PORT, () => console.log(`Apna Kamra running on port ${PORT}`));
-    // Auto-backup: once shortly after startup, then every 60 minutes
-    setTimeout(() => backupNow().then(() => console.log('✅ Initial backup uploaded to R2')).catch(e => console.error('Backup failed:', e.message)), 15000);
-    setInterval(() => backupNow().then(() => console.log('✅ Auto-backup uploaded to R2')).catch(e => console.error('Backup failed:', e.message)), 60 * 60 * 1000);
+
+    // Auto-backup every 60 minutes, but only if there's actual data (avoid overwriting a good backup with empty data)
+    setInterval(async () => {
+      try {
+        const r = await db.execute('SELECT COUNT(*) as c FROM properties');
+        if (Number(r.rows[0].c || 0) === 0) return;
+        await backupNow();
+        console.log('✅ Auto-backup uploaded to R2');
+      } catch (e) {
+        console.error('Backup failed:', e.message);
+      }
+    }, 60 * 60 * 1000);
   })
   .catch(err => {
     console.error('Failed to initialize database:', err);
