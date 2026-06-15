@@ -34,7 +34,7 @@
 
   <!-- LOGIN -->
   <div id="loginBox" class="panel-card" style="max-width:420px; margin:40px auto;">
-    <h2 style="margin-bottom:18px;">Super Admin Login</h2>
+    <h2 style="margin-bottom:18px;">Admin Login</h2>
     <div class="form-grid">
       <div class="full">
         <label>Mobile Number</label>
@@ -57,7 +57,8 @@
       <div class="tab-btn" data-tab="properties">Properties</div>
       <div class="tab-btn" data-tab="owners">Owners</div>
       <div class="tab-btn" data-tab="leads">Leads</div>
-      <div class="tab-btn" data-tab="backups">Backups</div>
+      <div class="tab-btn" data-tab="backups" id="backupsTabBtn">Backups</div>
+      <div class="tab-btn" data-tab="admins" id="adminsTabBtn">Admins</div>
     </div>
 
     <!-- CITIES TAB -->
@@ -74,6 +75,10 @@
             <input type="file" id="city_imageUpload" accept="image/*">
           </div>
           <div class="full">
+            <label>Localities (comma separated, e.g. Mahaveer Nagar, Vigyan Nagar, Talwandi)</label>
+            <input type="text" id="city_localities" placeholder="Locality 1, Locality 2, Locality 3">
+          </div>
+          <div class="full">
             <div class="thumb-row" id="city_image_preview"></div>
           </div>
         </div>
@@ -83,7 +88,7 @@
       <div class="panel-card">
         <h3 style="margin-bottom:14px;">All Cities</h3>
         <table>
-          <thead><tr><th>Image</th><th>Name</th><th>Slug</th><th></th></tr></thead>
+          <thead><tr><th>Image</th><th>Name</th><th>Slug</th><th>Localities</th><th></th></tr></thead>
           <tbody id="citiesTable"></tbody>
         </table>
       </div>
@@ -111,12 +116,24 @@
             </select>
           </div>
           <div>
+            <label>Locality</label>
+            <select id="p_locality"></select>
+          </div>
+          <div>
             <label>Owner Name</label>
             <input type="text" id="p_owner_name" placeholder="e.g. Rohit Sharma">
           </div>
           <div>
             <label>Owner Mobile Number</label>
             <input type="tel" id="p_owner_mobile" placeholder="10-digit mobile">
+          </div>
+          <div>
+            <label>Google Maps Link</label>
+            <input type="text" id="p_map_link" placeholder="https://maps.google.com/...">
+          </div>
+          <div>
+            <label>Views (impressions count)</label>
+            <input type="number" id="p_views" placeholder="0">
           </div>
           <div class="full">
             <label>Description</label>
@@ -199,11 +216,11 @@
 
     <!-- BACKUPS TAB -->
     <div class="tab-panel" id="tab-backups">
-      <div class="panel-card">
+      <div class="panel-card" style="margin-bottom:20px;">
         <h3 style="margin-bottom:14px;">Data Backup &amp; Recovery</h3>
         <p style="color:var(--text-dim); margin-bottom:14px; line-height:1.6;">
           All cities, properties, owners and leads are automatically backed up to your Cloudflare R2 bucket every hour.
-          You can also trigger a manual backup, or restore the database from the latest backup if data is ever lost.
+          You can also trigger a manual backup, or restore the database from any previous backup if data is ever lost.
         </p>
         <div class="badge" id="lastBackupBadge" style="margin-bottom:14px;">Loading backup status...</div>
         <div class="row">
@@ -212,10 +229,65 @@
         </div>
         <div id="backupMsg" style="margin-top:12px; color:var(--text-dim);"></div>
       </div>
+      <div class="panel-card">
+        <h3 style="margin-bottom:14px;">Backup History</h3>
+        <table>
+          <thead><tr><th>Date</th><th>Size</th><th></th></tr></thead>
+          <tbody id="backupsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ADMINS TAB (super admin only) -->
+    <div class="tab-panel" id="tab-admins">
+      <div class="panel-card" style="margin-bottom:20px;">
+        <h3 style="margin-bottom:14px;">Create Sub-Admin</h3>
+        <p style="color:var(--text-dim); margin-bottom:14px; line-height:1.6;">
+          Sub-admins can manage cities, properties, owners and leads, but cannot access Backups or create other admins.
+          Full control always remains with the main super admin (9983798590).
+        </p>
+        <div class="form-grid">
+          <div>
+            <label>Admin Mobile Number</label>
+            <input type="tel" id="a_mobile" placeholder="10-digit mobile">
+          </div>
+          <div>
+            <label>Password</label>
+            <input type="text" id="a_password" placeholder="Set password">
+          </div>
+        </div>
+        <button class="btn btn-solid" id="addAdminBtn" style="margin-top:14px;">Create Sub-Admin</button>
+        <div id="adminMsg" style="margin-top:10px; color:var(--text-dim);"></div>
+      </div>
+      <div class="panel-card">
+        <h3 style="margin-bottom:14px;">All Sub-Admins</h3>
+        <table>
+          <thead><tr><th>Mobile</th><th>Created</th><th></th></tr></thead>
+          <tbody id="adminsTable"></tbody>
+        </table>
+      </div>
     </div>
 
   </div>
 </div>
+
+<!-- JSON EDIT MODAL -->
+<div class="drawer-overlay" id="jsonOverlay"></div>
+<div class="drawer" id="jsonDrawer" style="width:480px;">
+  <div class="drawer-head">
+    <strong id="jsonDrawerTitle">Edit JSON</strong>
+    <button class="close-x" id="jsonCloseBtn">&times;</button>
+  </div>
+  <div class="drawer-body">
+    <textarea id="jsonEditor" rows="20" style="width:100%; font-family: monospace; font-size:12px;"></textarea>
+    <div id="jsonMsg" style="color:var(--text-dim);"></div>
+  </div>
+  <div class="drawer-foot">
+    <button class="btn btn-ghost btn-block" id="jsonCancelBtn">Cancel</button>
+    <button class="btn btn-solid btn-block" id="jsonSaveBtn">Save JSON</button>
+  </div>
+</div>
+
 
 <script src="/js/main.js"></script>
 <script>
@@ -230,8 +302,8 @@ document.getElementById('loginBtn').onclick = async ()=>{
   const mobile = document.getElementById('loginMobile').value.trim();
   const password = document.getElementById('loginPass').value;
   try{
-    await apiSend(API + '/admin/login', 'POST', {mobile,password});
-    auth = {mobile,password};
+    const res = await apiSend(API + '/admin/login', 'POST', {mobile,password});
+    auth = {mobile,password, role: res.role};
     sessionStorage.setItem('ak_admin', JSON.stringify(auth));
     showDashboard();
   }catch(e){
@@ -243,8 +315,16 @@ document.getElementById('logoutBtn').onclick = ()=>{ sessionStorage.removeItem('
 function showDashboard(){
   document.getElementById('loginBox').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
-  document.getElementById('adminLabel').textContent = `Super Admin (${auth.mobile})`;
+  document.getElementById('adminLabel').textContent = auth.role === 'super'
+    ? `Super Admin (${auth.mobile})`
+    : `Admin (${auth.mobile})`;
   document.getElementById('logoutBtn').style.display = 'inline-flex';
+
+  // Backups & Admins tabs are super-admin only
+  if(auth.role !== 'super'){
+    document.getElementById('backupsTabBtn').style.display = 'none';
+    document.getElementById('adminsTabBtn').style.display = 'none';
+  }
 
   // amenity checkboxes for property form
   document.getElementById('p_amenities').innerHTML = AMENITIES.map(a=>`
@@ -255,7 +335,11 @@ function showDashboard(){
   loadProps();
   loadOwners();
   loadLeads();
-  loadBackupStatus();
+  if(auth.role === 'super'){
+    loadBackupStatus();
+    loadBackupsList();
+    loadAdmins();
+  }
 }
 
 // ---------- TABS ----------
@@ -285,11 +369,13 @@ document.getElementById('city_imageUpload').onchange = async (e)=>{
 document.getElementById('addCityBtn').onclick = async ()=>{
   const name = document.getElementById('city_name').value.trim();
   if(!name) return;
+  const localities = document.getElementById('city_localities').value.split(',').map(s=>s.trim()).filter(Boolean);
   try{
-    await apiSend(API + '/cities', 'POST', {...auth, name, image: cityImageUrl});
+    await apiSend(API + '/cities', 'POST', {...auth, name, image: cityImageUrl, localities});
     document.getElementById('cityMsg').style.color = '#5ed697';
     document.getElementById('cityMsg').textContent = 'City added.';
     document.getElementById('city_name').value = '';
+    document.getElementById('city_localities').value = '';
     cityImageUrl = '';
     document.getElementById('city_image_preview').innerHTML = '';
     loadCities();
@@ -306,12 +392,17 @@ async function loadCities(){
       <td><div class="thumb" style="width:50px;height:50px;"><img src="${c.image || ''}"></div></td>
       <td>${c.name}</td>
       <td>${c.slug}</td>
-      <td><button class="btn btn-sm btn-danger" onclick="deleteCity(${c.id})">Delete</button></td>
+      <td style="max-width:220px; font-size:12px; color:var(--text-dim);">${(c.localities||[]).join(', ') || '—'}</td>
+      <td class="row">
+        <button class="btn btn-sm" onclick='openJsonEditor("city", ${c.id})'>JSON</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteCity(${c.id})">Delete</button>
+      </td>
     </tr>
   `).join('');
 
   // populate property city select
   document.getElementById('p_city').innerHTML = allCities.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  updateLocalityOptions();
 }
 async function deleteCity(id){
   if(!confirm('Delete this city? Properties in this city will remain but lose their city link.')) return;
@@ -338,6 +429,16 @@ function renderPropImages(){
 }
 function removePropImg(i){ propImages.splice(i,1); renderPropImages(); }
 
+function updateLocalityOptions(selected){
+  const cityId = Number(document.getElementById('p_city').value);
+  const city = allCities.find(c=>c.id===cityId);
+  const localities = (city && city.localities) ? city.localities : [];
+  const all = [...localities, 'Other'];
+  document.getElementById('p_locality').innerHTML = all.map(l=>`<option value="${l}">${l}</option>`).join('');
+  if(selected) document.getElementById('p_locality').value = selected;
+}
+document.getElementById('p_city').addEventListener('change', ()=> updateLocalityOptions());
+
 document.getElementById('resetPropBtn').onclick = resetPropForm;
 function resetPropForm(){
   document.getElementById('p_id').value = '';
@@ -349,9 +450,12 @@ function resetPropForm(){
   document.getElementById('p_price_double').value = '';
   document.getElementById('p_price_triple').value = '';
   document.getElementById('p_visible').value = '1';
+  document.getElementById('p_map_link').value = '';
+  document.getElementById('p_views').value = '';
   document.querySelectorAll('.p-amen-cb').forEach(c=>c.checked=false);
   propImages = [];
   renderPropImages();
+  updateLocalityOptions();
   document.getElementById('propFormTitle').textContent = 'Add Property';
 }
 
@@ -365,6 +469,9 @@ document.getElementById('savePropBtn').onclick = async ()=>{
     owner_name: document.getElementById('p_owner_name').value.trim(),
     owner_mobile: document.getElementById('p_owner_mobile').value.trim(),
     description: document.getElementById('p_description').value.trim(),
+    locality: document.getElementById('p_locality').value,
+    map_link: document.getElementById('p_map_link').value.trim(),
+    views: Number(document.getElementById('p_views').value) || 0,
     price_single: Number(document.getElementById('p_price_single').value)||0,
     price_double: Number(document.getElementById('p_price_double').value)||0,
     price_triple: Number(document.getElementById('p_price_triple').value)||0,
@@ -404,6 +511,7 @@ async function loadProps(){
       <td>${p.visible ? '<span class="badge visible-badge">Visible</span>' : '<span class="badge hidden-badge">Hidden</span>'}</td>
       <td class="row">
         <button class="btn btn-sm" onclick="editProp(${p.id})">Edit</button>
+        <button class="btn btn-sm btn-ghost" onclick='openJsonEditor("property", ${p.id})'>JSON</button>
         <button class="btn btn-sm btn-ghost" onclick="toggleVisible(${p.id}, ${p.visible})">${p.visible ? 'Hide' : 'Show'}</button>
         <a class="btn btn-sm btn-ghost" href="/property/${p.slug}" target="_blank">View</a>
         <button class="btn btn-sm btn-danger" onclick="deleteProp(${p.id})">Delete</button>
@@ -424,6 +532,9 @@ function editProp(id){
   document.getElementById('p_price_single').value = p.price_single || '';
   document.getElementById('p_price_double').value = p.price_double || '';
   document.getElementById('p_price_triple').value = p.price_triple || '';
+  document.getElementById('p_map_link').value = p.map_link || '';
+  document.getElementById('p_views').value = p.views || 0;
+  updateLocalityOptions(p.locality || '');
   document.querySelectorAll('.p-amen-cb').forEach(c=> c.checked = p.amenities.includes(c.value));
   propImages = [...(p.images || [])];
   renderPropImages();
@@ -535,6 +646,138 @@ document.getElementById('restoreBtn').onclick = async ()=>{
   }catch(e){
     msg.style.color = '#e57368';
     msg.textContent = 'Restore failed: ' + e.message;
+  }
+};
+
+function fmtBytes(n){
+  if(n < 1024) return n + ' B';
+  if(n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  return (n/(1024*1024)).toFixed(2) + ' MB';
+}
+
+async function loadBackupsList(){
+  try{
+    const { backups } = await apiGet(`${API}/admin/backups?${authQS()}`);
+    document.getElementById('backupsTable').innerHTML = backups.length ? backups.map(b=>`
+      <tr>
+        <td>${new Date(b.last_modified).toLocaleString()}</td>
+        <td>${fmtBytes(b.size)}</td>
+        <td><button class="btn btn-sm btn-danger" onclick='restoreFromKey("${b.key}")'>Restore this</button></td>
+      </tr>
+    `).join('') : `<tr><td colspan="3" style="text-align:center; color:var(--text-dim);">No backup history yet.</td></tr>`;
+  }catch(e){
+    document.getElementById('backupsTable').innerHTML = `<tr><td colspan="3" style="text-align:center; color:var(--text-dim);">Could not load backup history.</td></tr>`;
+  }
+}
+
+async function restoreFromKey(key){
+  if(!confirm('This will REPLACE all current data with this backup snapshot. Continue?')) return;
+  const msg = document.getElementById('backupMsg');
+  msg.style.color = 'var(--text-dim)';
+  msg.textContent = 'Restoring...';
+  try{
+    await apiSend(API + '/admin/restore', 'POST', {...auth, key});
+    msg.style.color = '#5ed697';
+    msg.textContent = 'Data restored successfully. Reloading...';
+    setTimeout(()=>location.reload(), 1200);
+  }catch(e){
+    msg.style.color = '#e57368';
+    msg.textContent = 'Restore failed: ' + e.message;
+  }
+}
+
+// ---------- SUB-ADMINS ----------
+document.getElementById('addAdminBtn').onclick = async ()=>{
+  const new_mobile = document.getElementById('a_mobile').value.trim();
+  const new_password = document.getElementById('a_password').value;
+  if(!/^[0-9]{10}$/.test(new_mobile) || !new_password){
+    document.getElementById('adminMsg').style.color = '#e57368';
+    document.getElementById('adminMsg').textContent = 'Enter valid 10-digit mobile and password.';
+    return;
+  }
+  try{
+    await apiSend(API + '/admin/subadmins', 'POST', {...auth, new_mobile, new_password});
+    document.getElementById('adminMsg').style.color = '#5ed697';
+    document.getElementById('adminMsg').textContent = 'Sub-admin created.';
+    document.getElementById('a_mobile').value = '';
+    document.getElementById('a_password').value = '';
+    loadAdmins();
+  }catch(e){
+    document.getElementById('adminMsg').style.color = '#e57368';
+    document.getElementById('adminMsg').textContent = 'Failed: ' + e.message;
+  }
+};
+async function loadAdmins(){
+  const admins = await apiGet(`${API}/admin/subadmins?${authQS()}`);
+  document.getElementById('adminsTable').innerHTML = admins.length ? admins.map(a=>`
+    <tr>
+      <td>${a.mobile}</td>
+      <td>${a.created_at ? new Date(a.created_at).toLocaleString() : '—'}</td>
+      <td><button class="btn btn-sm btn-danger" onclick="deleteAdmin('${a.mobile}')">Delete</button></td>
+    </tr>
+  `).join('') : `<tr><td colspan="3" style="text-align:center; color:var(--text-dim);">No sub-admins yet.</td></tr>`;
+}
+async function deleteAdmin(mobile){
+  if(!confirm('Remove this sub-admin?')) return;
+  await apiSend(`${API}/admin/subadmins/${mobile}?${authQS()}`, 'DELETE', {});
+  loadAdmins();
+}
+
+// ---------- JSON EDITOR (cities & properties) ----------
+const jsonOverlay = document.getElementById('jsonOverlay');
+const jsonDrawer = document.getElementById('jsonDrawer');
+let jsonEditTarget = null; // {type, id}
+
+function openJsonEditor(type, id){
+  jsonEditTarget = { type, id };
+  let data;
+  if(type === 'city'){
+    data = allCities.find(c=>c.id===id);
+    document.getElementById('jsonDrawerTitle').textContent = 'Edit City JSON';
+  }else{
+    data = allProps.find(p=>p.id===id);
+    document.getElementById('jsonDrawerTitle').textContent = 'Edit Property JSON';
+  }
+  document.getElementById('jsonEditor').value = JSON.stringify(data, null, 2);
+  document.getElementById('jsonMsg').textContent = '';
+  jsonOverlay.classList.add('open');
+  jsonDrawer.classList.add('open');
+}
+function closeJsonEditor(){
+  jsonOverlay.classList.remove('open');
+  jsonDrawer.classList.remove('open');
+  jsonEditTarget = null;
+}
+document.getElementById('jsonCloseBtn').onclick = closeJsonEditor;
+document.getElementById('jsonCancelBtn').onclick = closeJsonEditor;
+jsonOverlay.addEventListener('click', closeJsonEditor);
+
+document.getElementById('jsonSaveBtn').onclick = async ()=>{
+  const msg = document.getElementById('jsonMsg');
+  let parsed;
+  try{
+    parsed = JSON.parse(document.getElementById('jsonEditor').value);
+  }catch(e){
+    msg.style.color = '#e57368';
+    msg.textContent = 'Invalid JSON: ' + e.message;
+    return;
+  }
+  try{
+    if(jsonEditTarget.type === 'city'){
+      await apiSend(`${API}/cities/${jsonEditTarget.id}`, 'PUT', {...auth, ...parsed});
+      msg.style.color = '#5ed697';
+      msg.textContent = 'City updated.';
+      await loadCities();
+    }else{
+      await apiSend(`${API}/properties/${jsonEditTarget.id}`, 'PUT', {...auth, ...parsed});
+      msg.style.color = '#5ed697';
+      msg.textContent = 'Property updated.';
+      await loadProps();
+    }
+    setTimeout(closeJsonEditor, 600);
+  }catch(e){
+    msg.style.color = '#e57368';
+    msg.textContent = 'Save failed: ' + e.message;
   }
 };
 </script>

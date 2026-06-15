@@ -27,6 +27,9 @@
 
 <div class="container section">
   <div class="section-title">Choose your city</div>
+  <div class="city-search-wrap">
+    <input type="text" id="citySearch" class="city-search" placeholder="Search cities...">
+  </div>
   <div id="cities" class="city-grid">
     <div class="empty-state">Loading cities...</div>
   </div>
@@ -51,21 +54,35 @@ async function loadCities(){
       el.innerHTML = '<div class="empty-state">No cities added yet. Please check back soon.</div>';
       return;
     }
-    el.innerHTML = cities.map(c => `
-      <a class="city-card" href="/city/${c.slug}">
-        <img src="${c.image || 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?q=80&w=800&auto=format&fit=crop'}" alt="${c.name}">
-        <div class="overlay">
-          <div>
-            <span>EXPLORE</span>
-            <h3>${c.name}</h3>
-          </div>
-        </div>
-      </a>
-    `).join('');
+    window._allCities = cities;
+    renderCities(cities);
   }catch(e){
     el.innerHTML = '<div class="empty-state">Failed to load cities.</div>';
   }
 }
+function renderCities(cities){
+  const el = document.getElementById('cities');
+  if(!cities.length){
+    el.innerHTML = '<div class="empty-state">No cities match your search.</div>';
+    return;
+  }
+  el.innerHTML = cities.map(c => `
+    <a class="city-card" href="/city/${c.slug}">
+      <img src="${c.image || 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?q=80&w=800&auto=format&fit=crop'}" alt="${c.name}">
+      <div class="overlay">
+        <div>
+          <span>EXPLORE</span>
+          <h3>${c.name}</h3>
+        </div>
+      </div>
+    </a>
+  `).join('');
+}
+document.getElementById('citySearch').oninput = (e)=>{
+  const q = e.target.value.trim().toLowerCase();
+  const filtered = (window._allCities || []).filter(c => c.name.toLowerCase().includes(q));
+  renderCities(filtered);
+};
 loadCities();
 </script>
 </body>

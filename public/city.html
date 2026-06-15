@@ -26,6 +26,10 @@
 </div>
 
 <div class="container section">
+  <div class="back-link" onclick="smartBack('/')">&larr; Back to Home</div>
+</div>
+
+<div class="container section" style="padding-top:0;">
 
   <div class="filterbar">
     <input type="text" id="searchInput" class="search-input" placeholder="Search by property name...">
@@ -73,6 +77,10 @@
       <div class="field-label">Amenities</div>
       <div class="checkbox-grid" id="amenityList"></div>
     </div>
+    <div id="localitySection" style="display:none;">
+      <div class="field-label">Locality</div>
+      <div class="locality-chips" id="localityChips"></div>
+    </div>
   </div>
   <div class="drawer-foot">
     <button class="btn btn-ghost btn-block" id="clearFilters">Clear</button>
@@ -83,7 +91,7 @@
 <script src="/js/main.js"></script>
 <script>
 const citySlug = location.pathname.split('/').pop();
-let currentFilters = { minPrice:'', maxPrice:'', amenities:[] };
+let currentFilters = { minPrice:'', maxPrice:'', amenities:[], locality:[] };
 
 // build amenity checkboxes
 document.getElementById('amenityList').innerHTML = AMENITIES.map(a=>`
@@ -100,6 +108,16 @@ async function loadCityInfo(){
     if(city && city.image){
       document.querySelector('.hero').style.backgroundImage = `url('${city.image}')`;
     }
+    if(city && city.localities && city.localities.length){
+      const all = [...city.localities, 'Other'];
+      document.getElementById('localitySection').style.display = 'block';
+      document.getElementById('localityChips').innerHTML = all.map(l=>`
+        <div class="locality-chip" data-val="${l}">${l}</div>
+      `).join('');
+      document.querySelectorAll('.locality-chip').forEach(chip=>{
+        chip.onclick = ()=> chip.classList.toggle('active');
+      });
+    }
   }catch(e){}
 }
 
@@ -112,6 +130,7 @@ function buildQuery(){
   if(currentFilters.minPrice) params.set('minPrice', currentFilters.minPrice);
   if(currentFilters.maxPrice) params.set('maxPrice', currentFilters.maxPrice);
   if(currentFilters.amenities.length) params.set('amenities', currentFilters.amenities.join(','));
+  if(currentFilters.locality.length) params.set('locality', currentFilters.locality.join(','));
   return params.toString();
 }
 
@@ -132,7 +151,7 @@ async function loadProps(){
         </div>
         <div class="body">
           <h3>${p.name}</h3>
-          <div class="loc">${p.city_name}</div>
+          <div class="loc">${p.locality ? p.locality + ', ' : ''}${p.city_name}</div>
           <div class="amenity-tags">${amenityTags(p.amenities, 3)}</div>
           <div class="price-row">
             <span class="price">${fmtPrice(p.lowest_price)}</span>
@@ -161,6 +180,7 @@ document.getElementById('applyFilters').onclick = ()=>{
   currentFilters.minPrice = document.getElementById('minPrice').value;
   currentFilters.maxPrice = document.getElementById('maxPrice').value;
   currentFilters.amenities = Array.from(document.querySelectorAll('.amen-cb:checked')).map(c=>c.value);
+  currentFilters.locality = Array.from(document.querySelectorAll('.locality-chip.active')).map(c=>c.dataset.val);
   closeDrawer();
   loadProps();
 };
@@ -169,7 +189,8 @@ document.getElementById('clearFilters').onclick = ()=>{
   document.getElementById('minPrice').value = '';
   document.getElementById('maxPrice').value = '';
   document.querySelectorAll('.amen-cb').forEach(c=>c.checked=false);
-  currentFilters = { minPrice:'', maxPrice:'', amenities:[] };
+  document.querySelectorAll('.locality-chip').forEach(c=>c.classList.remove('active'));
+  currentFilters = { minPrice:'', maxPrice:'', amenities:[], locality:[] };
   loadProps();
 };
 

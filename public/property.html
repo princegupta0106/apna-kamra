@@ -43,50 +43,92 @@ async function load(){
 
     const images = p.images && p.images.length ? p.images : ['https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=1200&auto=format&fit=crop'];
 
+    let mapEmbed = '';
+    if(p.map_link){
+      let embedSrc = p.map_link;
+      if(embedSrc.includes('google.com/maps') && !embedSrc.includes('output=embed')){
+        embedSrc += (embedSrc.includes('?') ? '&' : '?') + 'output=embed';
+      }
+      mapEmbed = `
+        <div>
+          <div class="section-title" style="font-size:16px;">Location</div>
+          <div class="map-embed"><iframe src="${embedSrc}" loading="lazy" allowfullscreen></iframe></div>
+          <a class="btn btn-ghost btn-sm" style="margin-top:8px;" href="${p.map_link}" target="_blank">Open in Google Maps</a>
+        </div>
+      `;
+    }
+
     el.innerHTML = `
-      <div style="margin-bottom:14px;">
-        <a href="/city/${p.city_slug}" class="badge">&larr; Back to ${p.city_name}</a>
-      </div>
+      <div class="back-link" onclick="smartBack('/city/${p.city_slug}')">&larr; Back to ${p.city_name}</div>
 
       <div class="gallery">
-        ${images.map(img => `<img src="${img}" alt="${p.name}">`).join('')}
+        ${images.map((img,i) => `<div class="gallery-item" data-i="${i}"><img src="${img}" alt="${p.name}"></div>`).join('')}
       </div>
 
       <div style="margin-top:20px;">
         <h1 style="font-size:26px;">${p.name}</h1>
-        <div class="loc" style="margin-top:6px;">${p.city_name}${p.owner_name ? ' • Managed by ' + p.owner_name : ''}</div>
+        <div class="loc" style="margin-top:6px;">${p.locality ? p.locality + ', ' : ''}${p.city_name}${p.owner_name ? ' • Managed by ' + p.owner_name : ''}</div>
       </div>
 
-      <div class="price-box">
-        <div class="pbox">
-          <div class="label">Single Sharing</div>
-          <div class="val">${fmtPrice(p.price_single)}</div>
+      <div class="detail-grid">
+        <div>
+          <div class="price-box">
+            <div class="pbox">
+              <div class="label">Single Sharing</div>
+              <div class="val">${fmtPrice(p.price_single)}</div>
+            </div>
+            <div class="pbox">
+              <div class="label">Double Sharing</div>
+              <div class="val">${fmtPrice(p.price_double)}</div>
+            </div>
+            <div class="pbox">
+              <div class="label">Triple Sharing</div>
+              <div class="val">${fmtPrice(p.price_triple)}</div>
+            </div>
+          </div>
+
+          <div class="section-title" style="font-size:18px;">Amenities</div>
+          <div class="amenity-tags">${amenityTags(p.amenities)}</div>
+
+          <div class="section-title" style="font-size:18px; margin-top:24px;">About this property</div>
+          <p style="color:var(--text-dim); line-height:1.7;">${p.description ? p.description.replace(/\n/g,'<br>') : 'No description provided.'}</p>
+
+          ${mapEmbed}
         </div>
-        <div class="pbox">
-          <div class="label">Double Sharing</div>
-          <div class="val">${fmtPrice(p.price_double)}</div>
-        </div>
-        <div class="pbox">
-          <div class="label">Triple Sharing</div>
-          <div class="val">${fmtPrice(p.price_triple)}</div>
+
+        <div class="sticky-side">
+          <div class="contact-box">
+            <div style="color:var(--text-dim); font-size:14px;">Interested in this property?</div>
+            <button class="btn btn-solid btn-block" id="showContactBtn" style="margin-top:10px;">Show Contact Number</button>
+            <div id="contactResult"></div>
+          </div>
+          <button class="whatsapp-btn" id="whatsappBtn">💬 Ask on WhatsApp</button>
         </div>
       </div>
 
-      <div class="section-title" style="font-size:18px;">Amenities</div>
-      <div class="amenity-tags">${amenityTags(p.amenities)}</div>
-
-      <div class="section-title" style="font-size:18px; margin-top:24px;">About this property</div>
-      <p style="color:var(--text-dim); line-height:1.7;">${p.description ? p.description.replace(/\n/g,'<br>') : 'No description provided.'}</p>
-
-      <div class="contact-box">
-        <div style="color:var(--text-dim); font-size:14px;">Interested in this property?</div>
-        <button class="btn btn-solid" id="showContactBtn" style="margin-top:10px;">Show Contact Number</button>
-        <div id="contactResult"></div>
-      </div>
+      <div class="faq-section" id="faqContainer"></div>
     `;
 
     // count impression instantly for detail view
     ImpressionTracker.markNow(p.id);
+
+    // lightbox for gallery images
+    document.querySelectorAll('.gallery .gallery-item').forEach(itemEl=>{
+      itemEl.addEventListener('click', ()=> Lightbox.open(images, Number(itemEl.dataset.i)));
+    });
+
+    // whatsapp share - fetch owner's number first so it opens a direct chat
+    document.getElementById('whatsappBtn').onclick = async ()=>{
+      let ownerMobile = null;
+      try{
+        const c = await apiGet(`${API}/properties/${slug}/contact`);
+        ownerMobile = c.owner_mobile;
+      }catch(e){}
+      window.open(whatsappLink(p.name, p.slug, ownerMobile), '_blank');
+    };
+
+    // general FAQs
+    renderFAQs(document.getElementById('faqContainer'));
 
     document.getElementById('showContactBtn').onclick = async ()=>{
       try{
@@ -94,7 +136,7 @@ async function load(){
         document.getElementById('showContactBtn').style.display='none';
         document.getElementById('contactResult').innerHTML = `
           <div class="contact-number">${c.owner_mobile || 'Not available'}</div>
-          ${c.owner_mobile ? `<a class="btn btn-solid" style="margin-top:10px;" href="tel:${c.owner_mobile}">Call Now</a>` : ''}
+          ${c.owner_mobile ? `<a class="btn btn-solid btn-block" style="margin-top:10px;" href="tel:${c.owner_mobile}">Call Now</a>` : ''}
         `;
       }catch(e){
         document.getElementById('contactResult').innerHTML = '<div style="color:var(--text-dim); margin-top:10px;">Could not load contact.</div>';

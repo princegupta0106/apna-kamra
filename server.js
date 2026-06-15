@@ -35,11 +35,17 @@ async function initDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       slug TEXT UNIQUE NOT NULL,
-      image TEXT DEFAULT ''
+      image TEXT DEFAULT '',
+      localities TEXT DEFAULT '[]'
     )`,
     `CREATE TABLE IF NOT EXISTS owners (
       mobile TEXT PRIMARY KEY,
       password TEXT NOT NULL
+    )`,
+    `CREATE TABLE IF NOT EXISTS admins (
+      mobile TEXT PRIMARY KEY,
+      password TEXT NOT NULL,
+      created_at INTEGER
     )`,
     `CREATE TABLE IF NOT EXISTS properties (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,6 +55,8 @@ async function initDatabase() {
       owner_name TEXT DEFAULT '',
       owner_mobile TEXT DEFAULT '',
       description TEXT DEFAULT '',
+      locality TEXT DEFAULT '',
+      map_link TEXT DEFAULT '',
       price_single INTEGER DEFAULT 0,
       price_double INTEGER DEFAULT 0,
       price_triple INTEGER DEFAULT 0,
@@ -70,6 +78,17 @@ async function initDatabase() {
       value TEXT
     )`,
   ], 'write');
+
+  // migrations for existing databases (ignore errors if column already exists)
+  const migrations = [
+    'ALTER TABLE cities ADD COLUMN localities TEXT DEFAULT \'[]\'',
+    'ALTER TABLE properties ADD COLUMN locality TEXT DEFAULT \'\'',
+    'ALTER TABLE properties ADD COLUMN map_link TEXT DEFAULT \'\''
+  ];
+  for (const sql of migrations) {
+    try { await db.execute(sql); } catch (e) { /* column likely already exists */ }
+  }
+
   console.log('✅ Turso database initialized');
 }
 
@@ -297,14 +316,25 @@ function listR2(prefix) {
 }
 
 async function checkAuth(mobile, password) {
-  if (mobile === ADMIN_MOBILE && password === ADMIN_PASS) return 'admin';
+  if (mobile === ADMIN_MOBILE && password === ADMIN_PASS) return 'super';
   if (!mobile || !password) return null;
+  const a = await db.execute({
+    sql: 'SELECT * FROM admins WHERE mobile=? AND password=?',
+    args: [mobile, password]
+  });
+  if (a.rows.length) return 'admin';
   const r = await db.execute({
     sql: 'SELECT * FROM owners WHERE mobile=? AND password=?',
     args: [mobile, password]
   });
   if (r.rows.length) return 'owner';
   return null;
+}
+
+// 'super' = hardcoded main admin (full access incl. backups & sub-admin management)
+// 'admin' = sub-admin (everything except backups & sub-admin management)
+function isAdminRole(role) {
+  return role === 'super' || role === 'admin';
 }
 
 // ---- fetch a URL's body as a Buffer (used to download backups from R2) ----
@@ -326,9 +356,10 @@ function fetchUrl(url) {
 const BACKUP_KEY = 'apnakamra-backups/latest.json';
 
 async function exportAllData() {
-  const [cities, owners, properties, leads] = await Promise.all([
+  const [cities, owners, admins, properties, leads] = await Promise.all([
     db.execute('SELECT * FROM cities'),
     db.execute('SELECT * FROM owners'),
+    db.execute('SELECT * FROM admins'),
     db.execute('SELECT * FROM properties'),
     db.execute('SELECT * FROM leads'),
   ]);
@@ -336,6 +367,7 @@ async function exportAllData() {
     exported_at: Date.now(),
     cities: cities.rows,
     owners: owners.rows,
+    admins: admins.rows,
     properties: properties.rows,
     leads: leads.rows,
   };
@@ -366,23 +398,26 @@ async function restoreFromBackup(key) {
   const data = JSON.parse(buf.toString('utf8'));
 
   const statements = [
-    'DELETE FROM cities', 'DELETE FROM owners', 'DELETE FROM properties', 'DELETE FROM leads'
+    'DELETE FROM cities', 'DELETE FROM owners', 'DELETE FROM admins', 'DELETE FROM properties', 'DELETE FROM leads'
   ];
   await db.batch(statements, 'write');
 
   const inserts = [];
   for (const c of data.cities || []) {
-    inserts.push({ sql: 'INSERT INTO cities (id,name,slug,image) VALUES (?,?,?,?)', args: [c.id, c.name, c.slug, c.image] });
+    inserts.push({ sql: 'INSERT INTO cities (id,name,slug,image,localities) VALUES (?,?,?,?,?)', args: [c.id, c.name, c.slug, c.image, c.localities || '[]'] });
   }
   for (const o of data.owners || []) {
     inserts.push({ sql: 'INSERT INTO owners (mobile,password) VALUES (?,?)', args: [o.mobile, o.password] });
   }
+  for (const a of data.admins || []) {
+    inserts.push({ sql: 'INSERT INTO admins (mobile,password,created_at) VALUES (?,?,?)', args: [a.mobile, a.password, a.created_at] });
+  }
   for (const p of data.properties || []) {
     inserts.push({
-      sql: `INSERT INTO properties (id,slug,city_id,name,owner_name,owner_mobile,description,
+      sql: `INSERT INTO properties (id,slug,city_id,name,owner_name,owner_mobile,description,locality,map_link,
               price_single,price_double,price_triple,amenities,images,views,visible,created_at)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      args: [p.id, p.slug, p.city_id, p.name, p.owner_name, p.owner_mobile, p.description,
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      args: [p.id, p.slug, p.city_id, p.name, p.owner_name, p.owner_mobile, p.description, p.locality || '', p.map_link || '',
         p.price_single, p.price_double, p.price_triple, p.amenities, p.images, p.views, p.visible, p.created_at]
     });
   }
@@ -418,8 +453,9 @@ function asyncHandler(fn) {
 // ---------------- AUTH ----------------
 app.post('/api/admin/login', asyncHandler(async (req, res) => {
   const { mobile, password } = req.body;
-  if (mobile === ADMIN_MOBILE && password === ADMIN_PASS) return res.json({ ok: true });
-  res.status(401).json({ ok: false, error: 'Invalid credentials' });
+  const role = await checkAuth(mobile, password);
+  if (!isAdminRole(role)) return res.status(401).json({ ok: false, error: 'Invalid credentials' });
+  res.json({ ok: true, role });
 }));
 
 app.post('/api/owner/login', asyncHandler(async (req, res) => {
@@ -451,43 +487,44 @@ app.post('/api/upload', upload.single('file'), asyncHandler(async (req, res) => 
 // ---------------- CITIES ----------------
 app.get('/api/cities', asyncHandler(async (req, res) => {
   const r = await db.execute('SELECT * FROM cities ORDER BY name');
-  res.json(r.rows);
+  res.json(r.rows.map(c => ({ ...c, localities: (() => { try { return JSON.parse(c.localities || '[]'); } catch (e) { return []; } })() })));
 }));
 
 app.post('/api/cities', asyncHandler(async (req, res) => {
-  const { mobile, password, name, image } = req.body;
-  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  const { mobile, password, name, image, localities } = req.body;
+  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
   if (!name) return res.status(400).json({ error: 'name required' });
   const slug = slugify(name);
   const existing = await db.execute({ sql: 'SELECT id FROM cities WHERE slug=?', args: [slug] });
   if (existing.rows.length) return res.status(400).json({ error: 'city already exists' });
-  await db.execute({ sql: 'INSERT INTO cities (name, slug, image) VALUES (?,?,?)', args: [name, slug, image || ''] });
+  await db.execute({ sql: 'INSERT INTO cities (name, slug, image, localities) VALUES (?,?,?,?)', args: [name, slug, image || '', JSON.stringify(localities || [])] });
   res.json({ ok: true });
 }));
 
 app.put('/api/cities/:id', asyncHandler(async (req, res) => {
-  const { mobile, password, name, image } = req.body;
-  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  const { mobile, password, name, image, localities } = req.body;
+  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
   const existing = await db.execute({ sql: 'SELECT * FROM cities WHERE id=?', args: [req.params.id] });
   if (!existing.rows.length) return res.status(404).json({ error: 'not found' });
   const city = existing.rows[0];
   const newName = name !== undefined ? name : city.name;
   const newSlug = name !== undefined ? slugify(name) : city.slug;
   const newImage = image !== undefined ? image : city.image;
-  await db.execute({ sql: 'UPDATE cities SET name=?, slug=?, image=? WHERE id=?', args: [newName, newSlug, newImage, req.params.id] });
+  const newLocalities = localities !== undefined ? JSON.stringify(localities) : city.localities;
+  await db.execute({ sql: 'UPDATE cities SET name=?, slug=?, image=?, localities=? WHERE id=?', args: [newName, newSlug, newImage, newLocalities, req.params.id] });
   res.json({ ok: true });
 }));
 
 app.delete('/api/cities/:id', asyncHandler(async (req, res) => {
   const { mobile, password } = req.query;
-  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
   await db.execute({ sql: 'DELETE FROM cities WHERE id=?', args: [req.params.id] });
   res.json({ ok: true });
 }));
 
 // ---------------- PROPERTIES (public) ----------------
 app.get('/api/properties', asyncHandler(async (req, res) => {
-  const { city, minPrice, maxPrice, amenities, sort, q } = req.query;
+  const { city, minPrice, maxPrice, amenities, sort, q, locality } = req.query;
 
   const r = await db.execute(`
     SELECT p.*, c.name as city_name, c.slug as city_slug
@@ -507,6 +544,11 @@ app.get('/api/properties', asyncHandler(async (req, res) => {
   if (amenities) {
     const need = amenities.split(',').filter(Boolean);
     rows = rows.filter(row => need.every(a => row.amenities.includes(a)));
+  }
+
+  if (locality) {
+    const need = locality.split(',').filter(Boolean);
+    rows = rows.filter(row => need.includes(row.locality || 'Other'));
   }
 
   if (sort === 'price_asc') rows.sort((a, b) => (a.lowest_price || 999999) - (b.lowest_price || 999999));
@@ -539,7 +581,7 @@ app.get('/api/properties/:slug/contact', asyncHandler(async (req, res) => {
 // ---------------- PROPERTIES (admin / owner write) ----------------
 app.post('/api/properties', asyncHandler(async (req, res) => {
   const { mobile, password, ...d } = req.body;
-  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
   if (!d.name || !d.city_id) return res.status(400).json({ error: 'name and city required' });
 
   let baseSlug = slugify(d.slug || d.name);
@@ -550,11 +592,12 @@ app.post('/api/properties', asyncHandler(async (req, res) => {
   }
 
   const result = await db.execute({
-    sql: `INSERT INTO properties (slug, city_id, name, owner_name, owner_mobile, description,
+    sql: `INSERT INTO properties (slug, city_id, name, owner_name, owner_mobile, description, locality, map_link,
             price_single, price_double, price_triple, amenities, images, views, visible, created_at)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
     args: [
       slug, Number(d.city_id), d.name, d.owner_name || '', d.owner_mobile || '', d.description || '',
+      d.locality || '', d.map_link || '',
       Number(d.price_single) || 0, Number(d.price_double) || 0, Number(d.price_triple) || 0,
       JSON.stringify(d.amenities || []), JSON.stringify(d.images || []),
       d.visible === undefined ? 1 : Number(d.visible), Date.now()
@@ -575,7 +618,7 @@ app.put('/api/properties/:id', asyncHandler(async (req, res) => {
 
   const sets = [];
   const args = [];
-  const simpleFields = ['name', 'owner_name', 'description', 'price_single', 'price_double', 'price_triple'];
+  const simpleFields = ['name', 'owner_name', 'description', 'price_single', 'price_double', 'price_triple', 'locality', 'map_link'];
   simpleFields.forEach(f => {
     if (d[f] !== undefined) {
       sets.push(`${f}=?`);
@@ -585,7 +628,7 @@ app.put('/api/properties/:id', asyncHandler(async (req, res) => {
   if (d.amenities !== undefined) { sets.push('amenities=?'); args.push(JSON.stringify(d.amenities)); }
   if (d.images !== undefined) { sets.push('images=?'); args.push(JSON.stringify(d.images)); }
 
-  if (role === 'admin') {
+  if (isAdminRole(role)) {
     if (d.owner_mobile !== undefined) { sets.push('owner_mobile=?'); args.push(d.owner_mobile); }
     if (d.city_id !== undefined) { sets.push('city_id=?'); args.push(Number(d.city_id)); }
     if (d.visible !== undefined) { sets.push('visible=?'); args.push(Number(d.visible)); }
@@ -600,7 +643,7 @@ app.put('/api/properties/:id', asyncHandler(async (req, res) => {
 
 app.delete('/api/properties/:id', asyncHandler(async (req, res) => {
   const { mobile, password } = req.query;
-  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
   await db.execute({ sql: 'DELETE FROM properties WHERE id=?', args: [req.params.id] });
   res.json({ ok: true });
 }));
@@ -620,7 +663,7 @@ app.get('/api/owner/properties', asyncHandler(async (req, res) => {
 // ---------------- ADMIN PANEL ----------------
 app.get('/api/admin/properties', asyncHandler(async (req, res) => {
   const { mobile, password } = req.query;
-  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
   const r = await db.execute(`
     SELECT p.*, c.name as city_name FROM properties p JOIN cities c ON c.id=p.city_id
     ORDER BY p.created_at DESC
@@ -630,14 +673,14 @@ app.get('/api/admin/properties', asyncHandler(async (req, res) => {
 
 app.get('/api/admin/owners', asyncHandler(async (req, res) => {
   const { mobile, password } = req.query;
-  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
   const r = await db.execute('SELECT mobile FROM owners ORDER BY mobile');
   res.json(r.rows);
 }));
 
 app.post('/api/admin/owners', asyncHandler(async (req, res) => {
   const { mobile, password, new_mobile, new_password } = req.body;
-  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
   if (!new_mobile || !new_password) return res.status(400).json({ error: 'mobile and password required' });
   const existing = await db.execute({ sql: 'SELECT mobile FROM owners WHERE mobile=?', args: [new_mobile] });
   if (existing.rows.length) return res.status(400).json({ error: 'owner already exists' });
@@ -647,8 +690,34 @@ app.post('/api/admin/owners', asyncHandler(async (req, res) => {
 
 app.delete('/api/admin/owners/:mobile', asyncHandler(async (req, res) => {
   const { mobile, password } = req.query;
-  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
   await db.execute({ sql: 'DELETE FROM owners WHERE mobile=?', args: [req.params.mobile] });
+  res.json({ ok: true });
+}));
+
+// ---------------- SUB-ADMINS (managed only by the main super admin) ----------------
+app.get('/api/admin/subadmins', asyncHandler(async (req, res) => {
+  const { mobile, password } = req.query;
+  if ((await checkAuth(mobile, password)) !== 'super') return res.status(401).json({ error: 'unauthorized' });
+  const r = await db.execute('SELECT mobile, created_at FROM admins ORDER BY created_at DESC');
+  res.json(r.rows);
+}));
+
+app.post('/api/admin/subadmins', asyncHandler(async (req, res) => {
+  const { mobile, password, new_mobile, new_password } = req.body;
+  if ((await checkAuth(mobile, password)) !== 'super') return res.status(401).json({ error: 'unauthorized' });
+  if (!new_mobile || !new_password) return res.status(400).json({ error: 'mobile and password required' });
+  if (new_mobile === ADMIN_MOBILE) return res.status(400).json({ error: 'cannot override the main super admin' });
+  const existing = await db.execute({ sql: 'SELECT mobile FROM admins WHERE mobile=?', args: [new_mobile] });
+  if (existing.rows.length) return res.status(400).json({ error: 'admin already exists' });
+  await db.execute({ sql: 'INSERT INTO admins (mobile, password, created_at) VALUES (?,?,?)', args: [new_mobile, new_password, Date.now()] });
+  res.json({ ok: true });
+}));
+
+app.delete('/api/admin/subadmins/:mobile', asyncHandler(async (req, res) => {
+  const { mobile, password } = req.query;
+  if ((await checkAuth(mobile, password)) !== 'super') return res.status(401).json({ error: 'unauthorized' });
+  await db.execute({ sql: 'DELETE FROM admins WHERE mobile=?', args: [req.params.mobile] });
   res.json({ ok: true });
 }));
 
@@ -676,14 +745,14 @@ app.post('/api/leads', asyncHandler(async (req, res) => {
 
 app.get('/api/admin/leads', asyncHandler(async (req, res) => {
   const { mobile, password } = req.query;
-  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
   const r = await db.execute('SELECT * FROM leads ORDER BY created_at DESC');
   res.json(r.rows);
 }));
 
 app.delete('/api/admin/leads/:id', asyncHandler(async (req, res) => {
   const { mobile, password } = req.query;
-  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
   await db.execute({ sql: 'DELETE FROM leads WHERE id=?', args: [req.params.id] });
   res.json({ ok: true });
 }));
@@ -691,21 +760,21 @@ app.delete('/api/admin/leads/:id', asyncHandler(async (req, res) => {
 // ---------------- BACKUP / RESTORE ----------------
 app.get('/api/admin/backup-status', asyncHandler(async (req, res) => {
   const { mobile, password } = req.query;
-  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  if ((await checkAuth(mobile, password)) !== 'super') return res.status(401).json({ error: 'unauthorized' });
   const r = await db.execute({ sql: "SELECT value FROM meta WHERE key='last_backup_at'", args: [] });
   res.json({ last_backup_at: r.rows.length ? Number(r.rows[0].value) : null, backup_url: `${R2_PUBLIC_URL}/${BACKUP_KEY}` });
 }));
 
 app.post('/api/admin/backup', asyncHandler(async (req, res) => {
   const { mobile, password } = req.body;
-  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  if ((await checkAuth(mobile, password)) !== 'super') return res.status(401).json({ error: 'unauthorized' });
   const ts = await backupNow();
   res.json({ ok: true, last_backup_at: ts });
 }));
 
 app.get('/api/admin/backups', asyncHandler(async (req, res) => {
   const { mobile, password } = req.query;
-  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  if ((await checkAuth(mobile, password)) !== 'super') return res.status(401).json({ error: 'unauthorized' });
   let items = [];
   try { items = await listR2('apnakamra-backups/history/'); } catch (e) { items = []; }
   items.sort((a, b) => new Date(b.last_modified) - new Date(a.last_modified));
@@ -714,7 +783,7 @@ app.get('/api/admin/backups', asyncHandler(async (req, res) => {
 
 app.post('/api/admin/restore', asyncHandler(async (req, res) => {
   const { mobile, password, key } = req.body;
-  if ((await checkAuth(mobile, password)) !== 'admin') return res.status(401).json({ error: 'unauthorized' });
+  if ((await checkAuth(mobile, password)) !== 'super') return res.status(401).json({ error: 'unauthorized' });
   const ts = await restoreFromBackup(key);
   res.json({ ok: true, restored_from: ts });
 }));
