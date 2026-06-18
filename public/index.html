@@ -3,7 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Apna Kamra — Find Hostels & PGs</title>
+<title>Apna Kamra — Find Hostels & PGs Near You</title>
+<meta name="description" content="Apna Kamra is India's hostel & PG directory. Browse verified hostels and paying guest accommodations across cities, compare prices, amenities and call owners directly. No booking fee.">
+<meta name="keywords" content="hostel, PG, paying guest, hostel near me, boys hostel, girls hostel, student hostel, hostel Jaipur, hostel Bangalore, hostel Delhi">
+<meta property="og:title" content="Apna Kamra — Find Hostels & PGs Near You">
+<meta property="og:description" content="Browse verified hostels & PGs across cities. Compare prices, amenities, and call owners directly. No booking fee.">
+<meta property="og:image" content="https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=1200&auto=format&fit=crop">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -46,6 +54,11 @@
 
 <script src="/js/main.js"></script>
 <script>
+// Ask for mobile on homepage load (first visit)
+document.addEventListener('DOMContentLoaded', () => {
+  setTimeout(() => Visitor.askIfNeeded(null), 1200);
+});
+
 async function loadCities(){
   const el = document.getElementById('cities');
   try{
@@ -60,6 +73,7 @@ async function loadCities(){
     el.innerHTML = '<div class="empty-state">Failed to load cities.</div>';
   }
 }
+
 function renderCities(cities){
   const el = document.getElementById('cities');
   if(!cities.length){
@@ -67,17 +81,26 @@ function renderCities(cities){
     return;
   }
   el.innerHTML = cities.map(c => `
-    <a class="city-card" href="/city/${c.slug}">
-      <img src="${c.image || 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?q=80&w=800&auto=format&fit=crop'}" alt="${c.name}">
+    <div class="city-card" onclick="cityClicked('${c.slug}','${c.name}')">
+      <img data-src="${c.image || 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?q=80&w=800&auto=format&fit=crop'}" alt="${c.name}">
       <div class="overlay">
         <div>
           <span>EXPLORE</span>
           <h3>${c.name}</h3>
         </div>
       </div>
-    </a>
+    </div>
   `).join('');
+  lazyLoadImages(el);
 }
+
+function cityClicked(slug, name){
+  Visitor.askIfNeeded((mobile) => {
+    if(mobile) Visitor.sendCityLead(name);
+    location.href = '/city/' + slug;
+  });
+}
+
 document.getElementById('citySearch').oninput = (e)=>{
   const q = e.target.value.trim().toLowerCase();
   const filtered = (window._allCities || []).filter(c => c.name.toLowerCase().includes(q));

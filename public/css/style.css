@@ -290,6 +290,16 @@ th{ color: var(--text-dim); font-weight:600; }
   border:none; border-radius:2px; width:20px; height:20px; cursor:pointer; font-size:12px;
 }
 
+/* ---------- PROPERTY STATUS BADGES ---------- */
+.prop-badge{
+  display:inline-block; font-size:11px; font-weight:700; padding:3px 8px;
+  border-radius:var(--radius); border:1px solid;
+}
+.prop-badge.featured{ border-color:#d4af37; color:#d4af37; background:rgba(212,175,55,0.1); }
+.prop-badge.trusted{ border-color:#2e9e63; color:#5ed697; background:rgba(46,158,99,0.1); }
+.prop-badge.unverified{ border-color:#888; color:#aaa; background:rgba(128,128,128,0.08); }
+
+/* ---------- LAZY IMAGE PLACEHOLDER ---------- */
 .footer{
   border-top: 1px solid var(--card-border); padding: 30px 0; margin-top: 40px;
   color: var(--text-dim); font-size: 13px; text-align:center;
@@ -360,7 +370,11 @@ th{ color: var(--text-dim); font-weight:600; }
   position:absolute; top:18px; right:24px; font-size:32px; color:#fff;
   background:none; border:none; cursor:pointer; line-height:1;
 }
-.gallery .gallery-item{ cursor: zoom-in; }
+/* ---------- LAZY IMAGE PLACEHOLDER ---------- */
+img[data-src]{ background:var(--bg-soft); min-height:40px; }
+
+/* ---------- VISITOR SHEET ---------- */
+#visitorSheet *{ box-sizing:border-box; }
 
 /* ---------- WHATSAPP BUTTON ---------- */
 .whatsapp-btn{

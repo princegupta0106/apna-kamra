@@ -268,6 +268,7 @@
       </div>
     </div>
 
+
   </div>
 </div>
 
@@ -291,7 +292,7 @@
 
 <script src="/js/main.js"></script>
 <script>
-let auth = JSON.parse(sessionStorage.getItem('ak_admin') || 'null');
+let auth = JSON.parse(localStorage.getItem("ak_admin") || 'null');
 let allCities = [];
 let allProps = [];
 let propImages = [];
@@ -304,13 +305,13 @@ document.getElementById('loginBtn').onclick = async ()=>{
   try{
     const res = await apiSend(API + '/admin/login', 'POST', {mobile,password});
     auth = {mobile,password, role: res.role};
-    sessionStorage.setItem('ak_admin', JSON.stringify(auth));
+    localStorage.setItem("ak_admin", JSON.stringify(auth));
     showDashboard();
   }catch(e){
     document.getElementById('loginMsg').textContent = 'Invalid credentials.';
   }
 };
-document.getElementById('logoutBtn').onclick = ()=>{ sessionStorage.removeItem('ak_admin'); location.reload(); };
+document.getElementById('logoutBtn').onclick = ()=>{ localStorage.removeItem("ak_admin"); location.reload(); };
 
 function showDashboard(){
   document.getElementById('loginBox').style.display = 'none';
@@ -513,6 +514,9 @@ async function loadProps(){
         <button class="btn btn-sm" onclick="editProp(${p.id})">Edit</button>
         <button class="btn btn-sm btn-ghost" onclick='openJsonEditor("property", ${p.id})'>JSON</button>
         <button class="btn btn-sm btn-ghost" onclick="toggleVisible(${p.id}, ${p.visible})">${p.visible ? 'Hide' : 'Show'}</button>
+        <button class="btn btn-sm btn-ghost" onclick="toggleFlag(${p.id},'is_featured',${p.is_featured})" title="Featured">${p.is_featured ? '⭐' : '☆'}</button>
+        <button class="btn btn-sm btn-ghost" onclick="toggleFlag(${p.id},'is_trusted',${p.is_trusted})" title="Trusted">${p.is_trusted ? '✓' : '○'}</button>
+        <button class="btn btn-sm btn-ghost" onclick="toggleFlag(${p.id},'is_unverified',${p.is_unverified})" title="Unverified">${p.is_unverified ? '⚠' : '—'}</button>
         <a class="btn btn-sm btn-ghost" href="/property/${p.slug}" target="_blank">View</a>
         <button class="btn btn-sm btn-danger" onclick="deleteProp(${p.id})">Delete</button>
       </td>
@@ -545,6 +549,10 @@ function editProp(id){
 
 async function toggleVisible(id, current){
   await apiSend(`${API}/properties/${id}`, 'PUT', {...auth, visible: current ? 0 : 1});
+  loadProps();
+}
+async function toggleFlag(id, flag, current){
+  await apiSend(`${API}/properties/${id}`, 'PUT', {...auth, [flag]: current ? 0 : 1});
   loadProps();
 }
 async function deleteProp(id){
@@ -780,6 +788,7 @@ document.getElementById('jsonSaveBtn').onclick = async ()=>{
     msg.textContent = 'Save failed: ' + e.message;
   }
 };
+
 </script>
 </body>
 </html>

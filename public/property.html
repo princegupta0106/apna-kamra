@@ -3,7 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Apna Kamra — Property</title>
+<title id="pageTitle">Apna Kamra — Property</title>
+<meta name="description" id="pageDesc" content="View hostel and PG details, prices, amenities and contact the owner directly on Apna Kamra.">
+<meta property="og:title" id="ogTitle" content="Apna Kamra — Property">
+<meta property="og:description" id="ogDesc" content="View hostel and PG details on Apna Kamra.">
+<meta property="og:image" id="ogImage" content="https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=1200&auto=format&fit=crop">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -40,6 +46,12 @@ async function load(){
   try{
     const p = await apiGet(`${API}/properties/${slug}`);
     document.title = `${p.name} — Apna Kamra`;
+    document.getElementById('pageTitle').textContent = `${p.name} — Apna Kamra`;
+    const desc = `${p.name} in ${p.city_name}. ${p.description ? p.description.slice(0,120) + '...' : 'View prices, amenities and contact owner on Apna Kamra.'}`;
+    document.getElementById('pageDesc').setAttribute('content', desc);
+    document.getElementById('ogTitle').setAttribute('content', `${p.name} — Apna Kamra`);
+    document.getElementById('ogDesc').setAttribute('content', desc);
+    if(p.images && p.images[0]) document.getElementById('ogImage').setAttribute('content', p.images[0]);
 
     const images = p.images && p.images.length ? p.images : ['https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=1200&auto=format&fit=crop'];
 
@@ -62,10 +74,11 @@ async function load(){
       <div class="back-link" onclick="smartBack('/city/${p.city_slug}')">&larr; Back to ${p.city_name}</div>
 
       <div class="gallery">
-        ${images.map((img,i) => `<div class="gallery-item" data-i="${i}"><img src="${img}" alt="${p.name}"></div>`).join('')}
+        ${images.map((img,i) => `<div class="gallery-item" data-i="${i}"><img data-src="${img}" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 300'%3E%3Crect width='400' height='300' fill='%23222'/%3E%3C/svg%3E" alt="${p.name}"></div>`).join('')}
       </div>
 
       <div style="margin-top:20px;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">${statusBadges(p)}</div>
         <h1 style="font-size:26px;">${p.name}</h1>
         <div class="loc" style="margin-top:6px;">${p.locality ? p.locality + ', ' : ''}${p.city_name}${p.owner_name ? ' • Managed by ' + p.owner_name : ''}</div>
       </div>
@@ -109,25 +122,26 @@ async function load(){
       <div class="faq-section" id="faqContainer"></div>
     `;
 
-    // count impression instantly for detail view
-    ImpressionTracker.markNow(p.id);
+    // lazy load gallery images
+    lazyLoadImages(el);
 
-    // lightbox for gallery images
+    // count impression + visitor event
+    ImpressionTracker.markNow(p.id);
+    Visitor.trackView(p.id, p.city_name);
+
+    // lightbox
     document.querySelectorAll('.gallery .gallery-item').forEach(itemEl=>{
       itemEl.addEventListener('click', ()=> Lightbox.open(images, Number(itemEl.dataset.i)));
     });
 
-    // whatsapp share - fetch owner's number first so it opens a direct chat
+    // whatsapp
     document.getElementById('whatsappBtn').onclick = async ()=>{
       let ownerMobile = null;
-      try{
-        const c = await apiGet(`${API}/properties/${slug}/contact`);
-        ownerMobile = c.owner_mobile;
-      }catch(e){}
+      try{ const c = await apiGet(`${API}/properties/${slug}/contact`); ownerMobile = c.owner_mobile; }catch(e){}
       window.open(whatsappLink(p.name, p.slug, ownerMobile), '_blank');
     };
 
-    // general FAQs
+    // faqs
     renderFAQs(document.getElementById('faqContainer'));
 
     document.getElementById('showContactBtn').onclick = async ()=>{

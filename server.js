@@ -64,13 +64,25 @@ async function initDatabase() {
       images TEXT DEFAULT '[]',
       views INTEGER DEFAULT 0,
       visible INTEGER DEFAULT 1,
+      is_featured INTEGER DEFAULT 0,
+      is_trusted INTEGER DEFAULT 0,
+      is_unverified INTEGER DEFAULT 0,
       created_at INTEGER
     )`,
     `CREATE TABLE IF NOT EXISTS leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT DEFAULT '',
       mobile TEXT NOT NULL,
+      city TEXT DEFAULT '',
       message TEXT DEFAULT '',
+      created_at INTEGER
+    )`,
+    `CREATE TABLE IF NOT EXISTS visitor_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      mobile TEXT NOT NULL,
+      property_id INTEGER,
+      city TEXT DEFAULT '',
+      event_type TEXT DEFAULT 'view',
       created_at INTEGER
     )`,
     `CREATE TABLE IF NOT EXISTS meta (
@@ -79,17 +91,21 @@ async function initDatabase() {
     )`,
   ], 'write');
 
-  // migrations for existing databases (ignore errors if column already exists)
+  // migrations for existing databases
   const migrations = [
     'ALTER TABLE cities ADD COLUMN localities TEXT DEFAULT \'[]\'',
     'ALTER TABLE properties ADD COLUMN locality TEXT DEFAULT \'\'',
-    'ALTER TABLE properties ADD COLUMN map_link TEXT DEFAULT \'\''
+    'ALTER TABLE properties ADD COLUMN map_link TEXT DEFAULT \'\'',
+    'ALTER TABLE properties ADD COLUMN is_featured INTEGER DEFAULT 0',
+    'ALTER TABLE properties ADD COLUMN is_trusted INTEGER DEFAULT 0',
+    'ALTER TABLE properties ADD COLUMN is_unverified INTEGER DEFAULT 0',
+    'ALTER TABLE leads ADD COLUMN city TEXT DEFAULT \'\''
   ];
   for (const sql of migrations) {
-    try { await db.execute(sql); } catch (e) { /* column likely already exists */ }
+    try { await db.execute(sql); } catch (e) { /* already exists */ }
   }
 
-  console.log('✅ Turso database initialized');
+  console.log('✅ Database initialized');
 }
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 15 * 1024 * 1024 } });
@@ -556,6 +572,15 @@ app.get('/api/properties', asyncHandler(async (req, res) => {
   else if (sort === 'popular') rows.sort((a, b) => b.views - a.views);
   else rows.sort((a, b) => b.created_at - a.created_at);
 
+  // tier: featured > trusted > normal > unverified (stable within each tier)
+  function tier(p) {
+    if (p.is_featured) return 0;
+    if (p.is_trusted) return 1;
+    if (p.is_unverified) return 3;
+    return 2;
+  }
+  rows.sort((a, b) => tier(a) - tier(b));
+
   rows = rows.map(({ owner_mobile, ...rest }) => rest);
   res.json(rows);
 }));
@@ -593,14 +618,17 @@ app.post('/api/properties', asyncHandler(async (req, res) => {
 
   const result = await db.execute({
     sql: `INSERT INTO properties (slug, city_id, name, owner_name, owner_mobile, description, locality, map_link,
-            price_single, price_double, price_triple, amenities, images, views, visible, created_at)
-          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+            price_single, price_double, price_triple, amenities, images, views, visible,
+            is_featured, is_trusted, is_unverified, created_at)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,0,?,?,?,?,?)`,
     args: [
       slug, Number(d.city_id), d.name, d.owner_name || '', d.owner_mobile || '', d.description || '',
       d.locality || '', d.map_link || '',
       Number(d.price_single) || 0, Number(d.price_double) || 0, Number(d.price_triple) || 0,
       JSON.stringify(d.amenities || []), JSON.stringify(d.images || []),
-      d.visible === undefined ? 1 : Number(d.visible), Date.now()
+      d.visible === undefined ? 1 : Number(d.visible),
+      Number(d.is_featured) || 0, Number(d.is_trusted) || 0, Number(d.is_unverified) || 0,
+      Date.now()
     ]
   });
   res.json({ ok: true, id: Number(result.lastInsertRowid), slug });
@@ -633,6 +661,9 @@ app.put('/api/properties/:id', asyncHandler(async (req, res) => {
     if (d.city_id !== undefined) { sets.push('city_id=?'); args.push(Number(d.city_id)); }
     if (d.visible !== undefined) { sets.push('visible=?'); args.push(Number(d.visible)); }
     if (d.views !== undefined) { sets.push('views=?'); args.push(Number(d.views) || 0); }
+    if (d.is_featured !== undefined) { sets.push('is_featured=?'); args.push(Number(d.is_featured) || 0); }
+    if (d.is_trusted !== undefined) { sets.push('is_trusted=?'); args.push(Number(d.is_trusted) || 0); }
+    if (d.is_unverified !== undefined) { sets.push('is_unverified=?'); args.push(Number(d.is_unverified) || 0); }
   }
 
   if (!sets.length) return res.json({ ok: true });
@@ -734,13 +765,31 @@ app.post('/api/impressions', asyncHandler(async (req, res) => {
 
 // ---------------- LEADS ----------------
 app.post('/api/leads', asyncHandler(async (req, res) => {
-  const { name, mobile, message } = req.body;
+  const { name, mobile, city, message } = req.body;
   if (!mobile) return res.status(400).json({ error: 'mobile required' });
   await db.execute({
-    sql: 'INSERT INTO leads (name, mobile, message, created_at) VALUES (?,?,?,?)',
-    args: [name || '', mobile, message || '', Date.now()]
+    sql: 'INSERT INTO leads (name, mobile, city, message, created_at) VALUES (?,?,?,?,?)',
+    args: [name || '', mobile, city || '', message || '', Date.now()]
   });
   res.json({ ok: true });
+}));
+
+// ---------------- VISITOR EVENTS ----------------
+app.post('/api/events', asyncHandler(async (req, res) => {
+  const { mobile, property_id, city, event_type } = req.body;
+  if (!mobile) return res.json({ ok: true }); // silently skip if no mobile
+  await db.execute({
+    sql: 'INSERT INTO visitor_events (mobile, property_id, city, event_type, created_at) VALUES (?,?,?,?,?)',
+    args: [mobile, property_id || null, city || '', event_type || 'view', Date.now()]
+  });
+  res.json({ ok: true });
+}));
+
+app.get('/api/admin/events', asyncHandler(async (req, res) => {
+  const { mobile, password } = req.query;
+  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
+  const r = await db.execute('SELECT * FROM visitor_events ORDER BY created_at DESC LIMIT 500');
+  res.json(r.rows);
 }));
 
 app.get('/api/admin/leads', asyncHandler(async (req, res) => {
@@ -795,6 +844,30 @@ app.get('/property/:slug', (req, res) => res.sendFile(path.join(__dirname, 'publ
 app.get('/city/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public', 'city.html')));
 app.get('/owner', (req, res) => res.sendFile(path.join(__dirname, 'public', 'owner.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+
+const SITE_BASE = 'https://apna-kamra.up.railway.app';
+
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain');
+  res.send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /owner\nSitemap: ${SITE_BASE}/sitemap.xml`);
+});
+
+app.get('/sitemap.xml', asyncHandler(async (req, res) => {
+  const cities = await db.execute('SELECT slug FROM cities');
+  const props = await db.execute('SELECT slug FROM properties WHERE visible=1');
+  const staticPages = ['/', '/list-property.html'];
+  const urls = [
+    ...staticPages.map(p => `${SITE_BASE}${p}`),
+    ...cities.rows.map(c => `${SITE_BASE}/city/${c.slug}`),
+    ...props.rows.map(p => `${SITE_BASE}/property/${p.slug}`)
+  ];
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.map(u => `  <url><loc>${u}</loc><changefreq>weekly</changefreq></url>`).join('\n')}
+</urlset>`;
+  res.type('application/xml');
+  res.send(xml);
+}));
 
 const PORT = process.env.PORT || 3000;
 initDatabase()

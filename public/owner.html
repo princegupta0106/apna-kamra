@@ -90,7 +90,7 @@
 
 <script src="/js/main.js"></script>
 <script>
-let auth = JSON.parse(sessionStorage.getItem('ak_owner') || 'null');
+let auth = JSON.parse(localStorage.getItem("ak_owner") || 'null');
 let myProps = [];
 
 function showDashboard(){
@@ -107,7 +107,7 @@ document.getElementById('loginBtn').onclick = async ()=>{
   try{
     await apiSend(API + '/owner/login', 'POST', {mobile,password});
     auth = {mobile,password};
-    sessionStorage.setItem('ak_owner', JSON.stringify(auth));
+    localStorage.setItem("ak_owner", JSON.stringify(auth));
     showDashboard();
   }catch(e){
     document.getElementById('loginMsg').textContent = 'Invalid mobile or password.';
@@ -115,7 +115,7 @@ document.getElementById('loginBtn').onclick = async ()=>{
 };
 
 document.getElementById('logoutBtn').onclick = ()=>{
-  sessionStorage.removeItem('ak_owner');
+  localStorage.removeItem("ak_owner");
   location.reload();
 };
 
