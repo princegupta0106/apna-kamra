@@ -1,0 +1,44 @@
+{
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/city/(.*)",
+      "destination": "/city.html"
+    },
+    {
+      "source": "/property/(.*)",
+      "destination": "/property.html"
+    },
+    {
+      "source": "/owner",
+      "destination": "/owner.html"
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin.html"
+    },
+    {
+      "source": "/list-property",
+      "destination": "/list-property.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "X-XSS-Protection",
+          "value": "1; mode=block"
+        }
+      ]
+    }
+  ]
+}
