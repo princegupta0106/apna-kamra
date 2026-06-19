@@ -96,7 +96,7 @@ function renderCities(cities){
 
 function cityClicked(slug, name){
   Visitor.askIfNeeded((mobile) => {
-    if(mobile) Visitor.sendCityLead(name);
+    if(mobile) Visitor.trackCity(name);
     location.href = '/city/' + slug;
   });
 }

@@ -4,10 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Owner Panel — Apna Kamra</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-
 <nav class="navbar">
   <div class="container inner">
     <a href="/" class="brand">Apna <span>Kamra</span></a>
@@ -27,7 +27,9 @@
     <div class="form-grid">
       <div class="full">
         <label>Mobile Number</label>
-        <input type="tel" id="loginMobile" placeholder="10-digit mobile number">
+        <input type="tel" id="loginMobile" maxlength="10" pattern="[0-9]{10}"
+          placeholder="10-digit mobile number"
+          oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
       </div>
       <div class="full">
         <label>Password</label>
@@ -40,39 +42,55 @@
 
   <!-- DASHBOARD -->
   <div id="dashboard" style="display:none;">
-    <div class="section-title">My Properties</div>
-    <div id="propsList"></div>
+
+    <div class="tabs" style="margin-bottom:20px;">
+      <div class="tab-btn active" data-tab="properties">My Properties</div>
+      <div class="tab-btn" data-tab="city-visitors">City Visitors</div>
+      <div class="tab-btn" data-tab="property-visitors">Property Visitors</div>
+    </div>
+
+    <!-- MY PROPERTIES -->
+    <div class="tab-panel active" id="tab-properties">
+      <div id="propsList"></div>
+    </div>
+
+    <!-- CITY VISITORS: students who opened your city -->
+    <div class="tab-panel" id="tab-city-visitors">
+      <div class="panel-card">
+        <h3 style="margin-bottom:6px;">City Visitors</h3>
+        <p style="color:var(--text-dim); font-size:13px; margin-bottom:14px;">Students who entered their mobile number and visited your city on Apna Kamra.</p>
+        <table>
+          <thead><tr><th>Mobile</th><th>City</th><th>Visits</th><th>Last Seen</th></tr></thead>
+          <tbody id="cityVisitorsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PROPERTY VISITORS: students who opened your specific property page -->
+    <div class="tab-panel" id="tab-property-visitors">
+      <div class="panel-card">
+        <h3 style="margin-bottom:6px;">Property Visitors</h3>
+        <p style="color:var(--text-dim); font-size:13px; margin-bottom:14px;">Students who visited your property listing pages.</p>
+        <table>
+          <thead><tr><th>Mobile</th><th>Property</th><th>Time</th></tr></thead>
+          <tbody id="propVisitorsTable"></tbody>
+        </table>
+      </div>
+    </div>
+
   </div>
 
-  <!-- EDIT MODAL (inline panel) -->
-  <div id="editPanel" style="display:none;" class="panel-card">
+  <!-- EDIT PANEL -->
+  <div id="editPanel" style="display:none; margin-top:20px;" class="panel-card">
     <h3 style="margin-bottom:16px;">Edit Property</h3>
     <input type="hidden" id="editId">
     <div class="form-grid">
-      <div class="full">
-        <label>Property Name</label>
-        <input type="text" id="f_name">
-      </div>
-      <div class="full">
-        <label>Description</label>
-        <textarea id="f_description" rows="4"></textarea>
-      </div>
-      <div>
-        <label>Price - Single Sharing (₹/month)</label>
-        <input type="number" id="f_price_single">
-      </div>
-      <div>
-        <label>Price - Double Sharing (₹/month)</label>
-        <input type="number" id="f_price_double">
-      </div>
-      <div>
-        <label>Price - Triple Sharing (₹/month)</label>
-        <input type="number" id="f_price_triple">
-      </div>
-      <div class="full">
-        <label>Amenities</label>
-        <div class="checkbox-grid" id="f_amenities"></div>
-      </div>
+      <div class="full"><label>Property Name</label><input type="text" id="f_name"></div>
+      <div class="full"><label>Description</label><textarea id="f_description" rows="4"></textarea></div>
+      <div><label>Price - Single (₹/month)</label><input type="number" id="f_price_single"></div>
+      <div><label>Price - Double (₹/month)</label><input type="number" id="f_price_double"></div>
+      <div><label>Price - Triple (₹/month)</label><input type="number" id="f_price_triple"></div>
+      <div class="full"><label>Amenities</label><div class="checkbox-grid" id="f_amenities"></div></div>
       <div class="full">
         <label>Images</label>
         <input type="file" id="f_imageUpload" accept="image/*" multiple>
@@ -93,63 +111,136 @@
 let auth = JSON.parse(localStorage.getItem("ak_owner") || 'null');
 let myProps = [];
 
-function showDashboard(){
+// tabs
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  };
+});
+
+function authQS() { return `mobile=${auth.mobile}&password=${encodeURIComponent(auth.password)}`; }
+
+function showDashboard() {
   document.getElementById('loginBox').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
   document.getElementById('ownerLabel').textContent = `Logged in as ${auth.mobile}`;
   document.getElementById('logoutBtn').style.display = 'inline-flex';
   loadProperties();
+  loadCityVisitors();
+  loadPropertyVisitors();
 }
 
-document.getElementById('loginBtn').onclick = async ()=>{
+document.getElementById('loginBtn').onclick = async () => {
   const mobile = document.getElementById('loginMobile').value.trim();
   const password = document.getElementById('loginPass').value;
-  try{
-    await apiSend(API + '/owner/login', 'POST', {mobile,password});
-    auth = {mobile,password};
+  if (mobile.length !== 10) {
+    document.getElementById('loginMsg').textContent = 'Enter exactly 10 digits.';
+    return;
+  }
+  try {
+    await apiSend(API + '/owner/login', 'POST', { mobile, password });
+    auth = { mobile, password };
     localStorage.setItem("ak_owner", JSON.stringify(auth));
     showDashboard();
-  }catch(e){
+  } catch (e) {
     document.getElementById('loginMsg').textContent = 'Invalid mobile or password.';
   }
 };
+document.getElementById('logoutBtn').onclick = () => { localStorage.removeItem("ak_owner"); location.reload(); };
 
-document.getElementById('logoutBtn').onclick = ()=>{
-  localStorage.removeItem("ak_owner");
-  location.reload();
-};
-
-async function loadProperties(){
+async function loadProperties() {
   const list = document.getElementById('propsList');
   list.innerHTML = '<div class="empty-state">Loading...</div>';
-  try{
-    myProps = await apiGet(`${API}/owner/properties?mobile=${auth.mobile}&password=${encodeURIComponent(auth.password)}`);
-    if(!myProps.length){
+  try {
+    myProps = await apiGet(`${API}/owner/properties?${authQS()}`);
+    if (!myProps.length) {
       list.innerHTML = '<div class="empty-state">No properties assigned to your account yet. Contact admin.</div>';
       return;
     }
-    list.innerHTML = `<div class="prop-grid">` + myProps.map(p=>`
+    list.innerHTML = '<div class="prop-grid">' + myProps.map(p => `
       <div class="prop-card" style="cursor:default;">
         <div class="img-wrap">
-          <img src="${(p.images && p.images[0]) || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=900&auto=format&fit=crop'}">
+          <img data-src="${(p.images && p.images[0]) || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=900&auto=format&fit=crop'}"
+               src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 300'%3E%3Crect width='400' height='300' fill='%23222'/%3E%3C/svg%3E" alt="${p.name}">
         </div>
         <div class="body">
+          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">${statusBadges(p)}</div>
           <h3>${p.name}</h3>
-          <div class="loc">${p.city_name} ${p.visible ? '<span class="badge visible-badge">Visible</span>' : '<span class="badge hidden-badge">Hidden</span>'}</div>
-          <div class="price-row"><span class="price">${fmtPrice(p.lowest_price)}</span><span class="from">/month onwards</span></div>
-          <div class="badge">👁 ${p.views} views</div>
-          <button class="btn btn-sm" onclick="openEdit(${p.id})">Edit Details</button>
+          <div class="loc">${p.city_name}
+            ${p.visible ? '<span class="badge visible-badge">Visible</span>' : '<span class="badge hidden-badge">Hidden</span>'}
+          </div>
+          <div class="price-row">
+            <span class="price">${fmtPrice(p.lowest_price)}</span>
+            <span class="from">/month onwards</span>
+          </div>
+          <div class="badge" style="margin-top:4px;">👁 ${p.views} views</div>
+          <div style="display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;">
+            <button class="btn btn-sm" onclick="openEdit(${p.id})">Edit Details</button>
+            <button class="btn btn-sm" style="border-color:#d4af37;color:#d4af37;" onclick="requestBoost(${p.id},'${p.name.replace(/'/g,"\\'")}')">⚡ Request Boost</button>
+          </div>
         </div>
       </div>
-    `).join('') + `</div>`;
-  }catch(e){
+    `).join('') + '</div>';
+    lazyLoadImages(list);
+  } catch (e) {
     list.innerHTML = '<div class="empty-state">Failed to load properties.</div>';
   }
 }
 
+async function requestBoost(propId, propName) {
+  if (!confirm(`Request 5× Boost for "${propName}"?\n\nOur team will contact you to activate featured placement and more leads.`)) return;
+  try {
+    await apiSend(API + '/boost-request', 'POST', {
+      property_id: propId,
+      property_name: propName,
+      owner_mobile: auth.mobile
+    });
+    alert('Boost request sent! Our team will call you shortly.');
+  } catch (e) {
+    alert('Failed to send request. Please try again.');
+  }
+}
+
+async function loadCityVisitors() {
+  const tbody = document.getElementById('cityVisitorsTable');
+  try {
+    const rows = await apiGet(`${API}/owner/city-visitors?${authQS()}`);
+    tbody.innerHTML = rows.length ? rows.map(r => `
+      <tr>
+        <td>${r.mobile}</td>
+        <td>${r.city || '—'}</td>
+        <td>${r.visits}</td>
+        <td>${new Date(r.last_seen).toLocaleString()}</td>
+      </tr>
+    `).join('') : `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);">No city visitors yet.</td></tr>`;
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--text-dim);">Could not load.</td></tr>`;
+  }
+}
+
+async function loadPropertyVisitors() {
+  const tbody = document.getElementById('propVisitorsTable');
+  try {
+    const rows = await apiGet(`${API}/owner/property-visitors?${authQS()}`);
+    tbody.innerHTML = rows.length ? rows.map(r => `
+      <tr>
+        <td>${r.mobile}</td>
+        <td>${r.property_name}</td>
+        <td>${new Date(r.created_at).toLocaleString()}</td>
+      </tr>
+    `).join('') : `<tr><td colspan="3" style="text-align:center;color:var(--text-dim);">No property visitors yet.</td></tr>`;
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--text-dim);">Could not load.</td></tr>`;
+  }
+}
+
+// --- Edit property ---
 let editImages = [];
-function openEdit(id){
-  const p = myProps.find(x=>x.id===id);
+function openEdit(id) {
+  const p = myProps.find(x => x.id === id);
   document.getElementById('editId').value = p.id;
   document.getElementById('f_name').value = p.name;
   document.getElementById('f_description').value = p.description || '';
@@ -157,62 +248,56 @@ function openEdit(id){
   document.getElementById('f_price_double').value = p.price_double || '';
   document.getElementById('f_price_triple').value = p.price_triple || '';
   editImages = [...(p.images || [])];
-
-  document.getElementById('f_amenities').innerHTML = AMENITIES.map(a=>`
-    <label><input type="checkbox" value="${a}" class="f-amen-cb" ${p.amenities.includes(a)?'checked':''}> ${a}</label>
+  document.getElementById('f_amenities').innerHTML = AMENITIES.map(a => `
+    <label><input type="checkbox" value="${a}" class="f-amen-cb" ${p.amenities.includes(a) ? 'checked' : ''}> ${a}</label>
   `).join('');
-
   renderThumbs();
   document.getElementById('editPanel').style.display = 'block';
-  document.getElementById('editPanel').scrollIntoView({behavior:'smooth'});
+  document.getElementById('editPanel').scrollIntoView({ behavior: 'smooth' });
 }
 
-function renderThumbs(){
-  document.getElementById('f_images').innerHTML = editImages.map((url,i)=>`
+function renderThumbs() {
+  document.getElementById('f_images').innerHTML = editImages.map((url, i) => `
     <div class="thumb"><img src="${url}"><button class="rm" onclick="removeImg(${i})">&times;</button></div>
   `).join('');
 }
-function removeImg(i){ editImages.splice(i,1); renderThumbs(); }
+function removeImg(i) { editImages.splice(i, 1); renderThumbs(); }
 
-document.getElementById('f_imageUpload').onchange = async (e)=>{
-  const files = Array.from(e.target.files);
-  for(const file of files){
-    const fd = new FormData();
-    fd.append('file', file);
-    const res = await fetch(`${API}/upload?mobile=${auth.mobile}&password=${encodeURIComponent(auth.password)}`, {method:'POST', body:fd});
+document.getElementById('f_imageUpload').onchange = async (e) => {
+  for (const file of Array.from(e.target.files)) {
+    const fd = new FormData(); fd.append('file', file);
+    const res = await fetch(`${API}/upload?${authQS()}`, { method: 'POST', body: fd });
     const data = await res.json();
-    if(data.url) editImages.push(data.url);
+    if (data.url) editImages.push(data.url);
   }
-  renderThumbs();
-  e.target.value = '';
+  renderThumbs(); e.target.value = '';
 };
+document.getElementById('cancelBtn').onclick = () => { document.getElementById('editPanel').style.display = 'none'; };
 
-document.getElementById('cancelBtn').onclick = ()=>{ document.getElementById('editPanel').style.display='none'; };
-
-document.getElementById('saveBtn').onclick = async ()=>{
+document.getElementById('saveBtn').onclick = async () => {
   const id = document.getElementById('editId').value;
-  const amenities = Array.from(document.querySelectorAll('.f-amen-cb:checked')).map(c=>c.value);
-  try{
+  const amenities = Array.from(document.querySelectorAll('.f-amen-cb:checked')).map(c => c.value);
+  try {
     await apiSend(`${API}/properties/${id}`, 'PUT', {
       mobile: auth.mobile, password: auth.password,
       name: document.getElementById('f_name').value,
       description: document.getElementById('f_description').value,
-      price_single: Number(document.getElementById('f_price_single').value)||0,
-      price_double: Number(document.getElementById('f_price_double').value)||0,
-      price_triple: Number(document.getElementById('f_price_triple').value)||0,
+      price_single: Number(document.getElementById('f_price_single').value) || 0,
+      price_double: Number(document.getElementById('f_price_double').value) || 0,
+      price_triple: Number(document.getElementById('f_price_triple').value) || 0,
       amenities, images: editImages
     });
     document.getElementById('editMsg').style.color = '#5ed697';
-    document.getElementById('editMsg').textContent = 'Saved successfully!';
+    document.getElementById('editMsg').textContent = 'Saved!';
     document.getElementById('editPanel').style.display = 'none';
     loadProperties();
-  }catch(e){
+  } catch (e) {
     document.getElementById('editMsg').style.color = '#e57368';
-    document.getElementById('editMsg').textContent = 'Failed to save.';
+    document.getElementById('editMsg').textContent = 'Failed: ' + e.message;
   }
 };
 
-if(auth) showDashboard();
+if (auth) showDashboard();
 </script>
 </body>
 </html>

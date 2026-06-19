@@ -540,7 +540,7 @@ app.delete('/api/cities/:id', asyncHandler(async (req, res) => {
 
 // ---------------- PROPERTIES (public) ----------------
 app.get('/api/properties', asyncHandler(async (req, res) => {
-  const { city, minPrice, maxPrice, amenities, sort, q, locality } = req.query;
+  const { city, minPrice, maxPrice, amenities, sort, q, locality, flag } = req.query;
 
   const r = await db.execute(`
     SELECT p.*, c.name as city_name, c.slug as city_slug
@@ -556,16 +556,17 @@ app.get('/api/properties', asyncHandler(async (req, res) => {
   }
   if (minPrice) rows = rows.filter(row => row.lowest_price >= Number(minPrice));
   if (maxPrice) rows = rows.filter(row => row.lowest_price > 0 && row.lowest_price <= Number(maxPrice));
-
   if (amenities) {
     const need = amenities.split(',').filter(Boolean);
     rows = rows.filter(row => need.every(a => row.amenities.includes(a)));
   }
-
   if (locality) {
     const need = locality.split(',').filter(Boolean);
     rows = rows.filter(row => need.includes(row.locality || 'Other'));
   }
+  if (flag === 'featured') rows = rows.filter(row => row.is_featured);
+  if (flag === 'trusted') rows = rows.filter(row => row.is_trusted);
+  if (flag === 'unverified') rows = rows.filter(row => row.is_unverified);
 
   if (sort === 'price_asc') rows.sort((a, b) => (a.lowest_price || 999999) - (b.lowest_price || 999999));
   else if (sort === 'price_desc') rows.sort((a, b) => b.lowest_price - a.lowest_price);
@@ -763,39 +764,56 @@ app.post('/api/impressions', asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// ---------------- LEADS ----------------
+// ---------------- OWNER: see who visited their city & properties ----------------
+app.get('/api/owner/city-visitors', asyncHandler(async (req, res) => {
+  const { mobile, password } = req.query;
+  if ((await checkAuth(mobile, password)) !== 'owner') return res.status(401).json({ error: 'unauthorized' });
+  const props = await db.execute({ sql: 'SELECT id, name, city_id FROM properties WHERE owner_mobile=?', args: [mobile] });
+  if (!props.rows.length) return res.json([]);
+  const cityIds = [...new Set(props.rows.map(p => Number(p.city_id)))];
+  const cities = await db.execute({ sql: `SELECT id, name FROM cities WHERE id IN (${cityIds.map(()=>'?').join(',')})`, args: cityIds });
+  const cityNames = cities.rows.map(c => c.name);
+  // visitor events where city matches owner's cities
+  const placeholders = cityNames.map(()=>'?').join(',');
+  const r = await db.execute({
+    sql: `SELECT mobile, city, COUNT(*) as visits, MAX(created_at) as last_seen
+          FROM visitor_events WHERE city IN (${placeholders})
+          GROUP BY mobile, city ORDER BY last_seen DESC LIMIT 300`,
+    args: cityNames
+  });
+  res.json(r.rows);
+}));
+
+app.get('/api/owner/property-visitors', asyncHandler(async (req, res) => {
+  const { mobile, password } = req.query;
+  if ((await checkAuth(mobile, password)) !== 'owner') return res.status(401).json({ error: 'unauthorized' });
+  const props = await db.execute({ sql: 'SELECT id, name FROM properties WHERE owner_mobile=?', args: [mobile] });
+  if (!props.rows.length) return res.json([]);
+  const propIds = props.rows.map(p => Number(p.id));
+  const propMap = Object.fromEntries(props.rows.map(p => [Number(p.id), p.name]));
+  const r = await db.execute({
+    sql: `SELECT mobile, property_id, created_at FROM visitor_events
+          WHERE property_id IN (${propIds.map(()=>'?').join(',')}) ORDER BY created_at DESC LIMIT 300`,
+    args: propIds
+  });
+  res.json(r.rows.map(row => ({ ...row, property_name: propMap[Number(row.property_id)] || '—' })));
+}));
+
+// ---------------- LISTING REQUESTS (admin only) ----------------
 app.post('/api/leads', asyncHandler(async (req, res) => {
-  const { name, mobile, city, message } = req.body;
+  const { name, mobile, message } = req.body;
   if (!mobile) return res.status(400).json({ error: 'mobile required' });
   await db.execute({
     sql: 'INSERT INTO leads (name, mobile, city, message, created_at) VALUES (?,?,?,?,?)',
-    args: [name || '', mobile, city || '', message || '', Date.now()]
+    args: [name || '', mobile, '', message || '', Date.now()]
   });
   res.json({ ok: true });
-}));
-
-// ---------------- VISITOR EVENTS ----------------
-app.post('/api/events', asyncHandler(async (req, res) => {
-  const { mobile, property_id, city, event_type } = req.body;
-  if (!mobile) return res.json({ ok: true }); // silently skip if no mobile
-  await db.execute({
-    sql: 'INSERT INTO visitor_events (mobile, property_id, city, event_type, created_at) VALUES (?,?,?,?,?)',
-    args: [mobile, property_id || null, city || '', event_type || 'view', Date.now()]
-  });
-  res.json({ ok: true });
-}));
-
-app.get('/api/admin/events', asyncHandler(async (req, res) => {
-  const { mobile, password } = req.query;
-  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
-  const r = await db.execute('SELECT * FROM visitor_events ORDER BY created_at DESC LIMIT 500');
-  res.json(r.rows);
 }));
 
 app.get('/api/admin/leads', asyncHandler(async (req, res) => {
   const { mobile, password } = req.query;
   if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
-  const r = await db.execute('SELECT * FROM leads ORDER BY created_at DESC');
+  const r = await db.execute("SELECT * FROM leads WHERE message NOT LIKE 'BOOST:%' ORDER BY created_at DESC");
   res.json(r.rows);
 }));
 
@@ -804,6 +822,54 @@ app.delete('/api/admin/leads/:id', asyncHandler(async (req, res) => {
   if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
   await db.execute({ sql: 'DELETE FROM leads WHERE id=?', args: [req.params.id] });
   res.json({ ok: true });
+}));
+
+// ---------------- BOOST REQUESTS ----------------
+app.post('/api/boost-request', asyncHandler(async (req, res) => {
+  const { mobile, property_id, property_name, owner_mobile } = req.body;
+  if (!owner_mobile) return res.status(400).json({ error: 'owner mobile required' });
+  await db.execute({
+    sql: 'INSERT INTO leads (name, mobile, city, message, created_at) VALUES (?,?,?,?,?)',
+    args: [property_name || 'Unknown Property', owner_mobile, '', `BOOST:property_id=${property_id}`, Date.now()]
+  });
+  res.json({ ok: true });
+}));
+
+app.get('/api/admin/boost-requests', asyncHandler(async (req, res) => {
+  const { mobile, password } = req.query;
+  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
+  const r = await db.execute("SELECT * FROM leads WHERE message LIKE 'BOOST:%' ORDER BY created_at DESC");
+  res.json(r.rows);
+}));
+
+// ---------------- VISITOR EVENTS (city-level tracking, triggered when user enters mobile) ----------------
+app.post('/api/events', asyncHandler(async (req, res) => {
+  const { mobile, property_id, city, event_type } = req.body;
+  if (!mobile) return res.json({ ok: true });
+  await db.execute({
+    sql: 'INSERT INTO visitor_events (mobile, property_id, city, event_type, created_at) VALUES (?,?,?,?,?)',
+    args: [mobile, property_id || null, city || '', event_type || 'view', Date.now()]
+  });
+  res.json({ ok: true });
+}));
+
+// admin: all events
+app.get('/api/admin/events', asyncHandler(async (req, res) => {
+  const { mobile, password } = req.query;
+  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
+  const r = await db.execute('SELECT * FROM visitor_events ORDER BY created_at DESC LIMIT 500');
+  res.json(r.rows);
+}));
+
+// admin: unique visitor summary
+app.get('/api/admin/visitors', asyncHandler(async (req, res) => {
+  const { mobile, password } = req.query;
+  if (!isAdminRole(await checkAuth(mobile, password))) return res.status(401).json({ error: 'unauthorized' });
+  const r = await db.execute(`
+    SELECT mobile, city, COUNT(*) as visits, MAX(created_at) as last_seen
+    FROM visitor_events GROUP BY mobile, city ORDER BY last_seen DESC LIMIT 500
+  `);
+  res.json(r.rows);
 }));
 
 // ---------------- BACKUP / RESTORE ----------------

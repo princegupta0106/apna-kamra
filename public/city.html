@@ -86,6 +86,15 @@
       <div class="field-label">Locality</div>
       <div class="locality-chips" id="localityChips"></div>
     </div>
+    <div>
+      <div class="field-label">Property Type</div>
+      <div class="locality-chips" id="flagChips">
+        <div class="locality-chip" data-val="featured">⭐ Featured</div>
+        <div class="locality-chip" data-val="trusted">✓ Trusted</div>
+        <div class="locality-chip" data-val="unverified">⚠ Unverified</div>
+        <div class="locality-chip" data-val="">All</div>
+      </div>
+    </div>
   </div>
   <div class="drawer-foot">
     <button class="btn btn-ghost btn-block" id="clearFilters">Clear</button>
@@ -96,7 +105,7 @@
 <script src="/js/main.js"></script>
 <script>
 const citySlug = location.pathname.split('/').pop();
-let currentFilters = { minPrice:'', maxPrice:'', amenities:[], locality:[] };
+let currentFilters = { minPrice:'', maxPrice:'', amenities:[], locality:[], flag:'' };
 
 // build amenity checkboxes
 document.getElementById('amenityList').innerHTML = AMENITIES.map(a=>`
@@ -136,6 +145,7 @@ function buildQuery(){
   if(currentFilters.maxPrice) params.set('maxPrice', currentFilters.maxPrice);
   if(currentFilters.amenities.length) params.set('amenities', currentFilters.amenities.join(','));
   if(currentFilters.locality.length) params.set('locality', currentFilters.locality.join(','));
+  if(currentFilters.flag) params.set('flag', currentFilters.flag);
   return params.toString();
 }
 
@@ -186,6 +196,8 @@ document.getElementById('applyFilters').onclick = ()=>{
   currentFilters.maxPrice = document.getElementById('maxPrice').value;
   currentFilters.amenities = Array.from(document.querySelectorAll('.amen-cb:checked')).map(c=>c.value);
   currentFilters.locality = Array.from(document.querySelectorAll('.locality-chip.active')).map(c=>c.dataset.val);
+  const activeFlag = document.querySelector('#flagChips .locality-chip.active');
+  currentFilters.flag = activeFlag ? activeFlag.dataset.val : '';
   closeDrawer();
   loadProps();
 };
@@ -195,9 +207,17 @@ document.getElementById('clearFilters').onclick = ()=>{
   document.getElementById('maxPrice').value = '';
   document.querySelectorAll('.amen-cb').forEach(c=>c.checked=false);
   document.querySelectorAll('.locality-chip').forEach(c=>c.classList.remove('active'));
-  currentFilters = { minPrice:'', maxPrice:'', amenities:[], locality:[] };
+  currentFilters = { minPrice:'', maxPrice:'', amenities:[], locality:[], flag:'' };
   loadProps();
 };
+
+// flag chips are single-select
+document.querySelectorAll('#flagChips .locality-chip').forEach(chip=>{
+  chip.onclick = ()=>{
+    document.querySelectorAll('#flagChips .locality-chip').forEach(c=>c.classList.remove('active'));
+    chip.classList.add('active');
+  };
+});
 
 document.getElementById('sortSelect').onchange = loadProps;
 let searchTimer;

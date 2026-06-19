@@ -55,19 +55,9 @@ async function load(){
 
     const images = p.images && p.images.length ? p.images : ['https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=1200&auto=format&fit=crop'];
 
-    let mapEmbed = '';
+    let mapBtn = '';
     if(p.map_link){
-      let embedSrc = p.map_link;
-      if(embedSrc.includes('google.com/maps') && !embedSrc.includes('output=embed')){
-        embedSrc += (embedSrc.includes('?') ? '&' : '?') + 'output=embed';
-      }
-      mapEmbed = `
-        <div>
-          <div class="section-title" style="font-size:16px;">Location</div>
-          <div class="map-embed"><iframe src="${embedSrc}" loading="lazy" allowfullscreen></iframe></div>
-          <a class="btn btn-ghost btn-sm" style="margin-top:8px;" href="${p.map_link}" target="_blank">Open in Google Maps</a>
-        </div>
-      `;
+      mapBtn = `<a class="btn btn-ghost" href="${p.map_link}" target="_blank" style="margin-top:10px;">📍 View on Google Maps</a>`;
     }
 
     el.innerHTML = `
@@ -105,8 +95,7 @@ async function load(){
 
           <div class="section-title" style="font-size:18px; margin-top:24px;">About this property</div>
           <p style="color:var(--text-dim); line-height:1.7;">${p.description ? p.description.replace(/\n/g,'<br>') : 'No description provided.'}</p>
-
-          ${mapEmbed}
+          ${mapBtn}
         </div>
 
         <div class="sticky-side">
@@ -127,7 +116,7 @@ async function load(){
 
     // count impression + visitor event
     ImpressionTracker.markNow(p.id);
-    Visitor.trackView(p.id, p.city_name);
+    Visitor.trackProperty(p.id, p.city_name);
 
     // lightbox
     document.querySelectorAll('.gallery .gallery-item').forEach(itemEl=>{
