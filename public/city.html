@@ -5,16 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Hostels & PGs — Apna Kamra</title>
 <meta name="description" content="Find hostels and PGs in your city. Compare prices, amenities and contact owners directly on Apna Kamra.">
-<meta property="og:title" content="Hostels & PGs — Apna Kamra">
 <meta property="og:image" content="https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=1200&auto=format&fit=crop">
-<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
 
-<nav class="navbar">
-  <div class="container inner">
+<nav class="navbar scrolled" id="mainNav">
+  <div class="inner">
     <a href="/" class="brand">Apna <span>Kamra</span></a>
     <div class="nav-links">
       <button class="btn btn-sm theme-toggle"></button>
@@ -23,51 +21,51 @@
   </div>
 </nav>
 
-<div class="hero" style="min-height:32vh; background-image:url('https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?q=80&w=1600&auto=format&fit=crop')">
+<!-- CITY HERO -->
+<div class="hero-city" id="cityHero" style="margin-top:68px;">
+  <div class="hero-bg" id="heroBg" style="background-image:url('https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?q=80&w=1600&auto=format&fit=crop')"></div>
   <div class="hero-content">
+    <div class="hero-eyebrow">Hostels & PGs</div>
     <h1 id="cityTitle">Loading...</h1>
-    <p>Browse hostels & PGs, compare prices and amenities, and connect directly with owners.</p>
+    <p>Browse, compare prices and amenities, connect with owners directly</p>
   </div>
 </div>
 
-<div class="container section">
-  <div class="back-link" onclick="smartBack('/')">&larr; Back to Home</div>
-</div>
-
-<div class="container section" style="padding-top:0;">
+<div class="container section" style="padding-top:40px;">
+  <div class="back-link" onclick="smartBack('/')">← Back to Home</div>
 
   <div class="filterbar">
     <input type="text" id="searchInput" class="search-input" placeholder="Search by property name...">
-    <select id="sortSelect">
+    <select id="sortSelect" style="min-width:160px;">
       <option value="newest">Newest first</option>
       <option value="price_asc">Price: Low to High</option>
       <option value="price_desc">Price: High to Low</option>
       <option value="popular">Most Viewed</option>
     </select>
-    <button class="btn" id="openFilters">Filters</button>
+    <button class="btn" id="openFilters">⚙ Filters</button>
   </div>
 
-  <div id="resultCount" class="badge" style="margin-bottom:14px;"></div>
-
-  <div id="props" class="prop-grid">
-    <div class="empty-state">Loading properties...</div>
-  </div>
+  <div id="resultCount" class="badge" style="margin-bottom:18px;"></div>
+  <div id="props" class="prop-grid"><div class="empty-state">Loading properties...</div></div>
 </div>
 
 <div class="footer">
-  Apna Kamra — your trusted directory for hostels & PGs.
-  <div class="links">
-    <a href="/list-property.html">List Your Property</a>
-    <a href="/owner">Owner Login</a>
-    <a href="/admin">Admin</a>
+  <div class="container">
+    <div class="brand-footer">Apna <span>Kamra</span></div>
+    <div class="tagline">Your trusted directory for hostels & PGs across India</div>
+    <div class="links">
+      <a href="/list-property.html">List Your Property</a>
+      <a href="/owner">Owner Login</a>
+      <a href="/admin">Admin</a>
+    </div>
   </div>
 </div>
 
-<!-- Filters Drawer -->
+<!-- FILTER DRAWER -->
 <div class="drawer-overlay" id="overlay"></div>
 <div class="drawer" id="drawer">
   <div class="drawer-head">
-    <strong>Filters</strong>
+    <strong style="letter-spacing:1px;text-transform:uppercase;font-size:13px;">Filters</strong>
     <button class="close-x" id="closeDrawer">&times;</button>
   </div>
   <div class="drawer-body">
@@ -89,15 +87,15 @@
     <div>
       <div class="field-label">Property Type</div>
       <div class="locality-chips" id="flagChips">
+        <div class="locality-chip" data-val="">All</div>
         <div class="locality-chip" data-val="featured">⭐ Featured</div>
         <div class="locality-chip" data-val="trusted">✓ Trusted</div>
         <div class="locality-chip" data-val="unverified">⚠ Unverified</div>
-        <div class="locality-chip" data-val="">All</div>
       </div>
     </div>
   </div>
   <div class="drawer-foot">
-    <button class="btn btn-ghost btn-block" id="clearFilters">Clear</button>
+    <button class="btn btn-ghost btn-block" id="clearFilters">Clear All</button>
     <button class="btn btn-solid btn-block" id="applyFilters">Apply Filters</button>
   </div>
 </div>
@@ -107,67 +105,68 @@
 const citySlug = location.pathname.split('/').pop();
 let currentFilters = { minPrice:'', maxPrice:'', amenities:[], locality:[], flag:'' };
 
-// build amenity checkboxes
-document.getElementById('amenityList').innerHTML = AMENITIES.map(a=>`
+document.getElementById('amenityList').innerHTML = AMENITIES.map(a => `
   <label><input type="checkbox" value="${a}" class="amen-cb"> ${a}</label>
 `).join('');
 
-async function loadCityInfo(){
-  try{
+async function loadCityInfo() {
+  try {
     const cities = await apiGet(API + '/cities');
-    const city = cities.find(c=>c.slug === citySlug);
-    document.getElementById('cityTitle').innerHTML = city
-      ? `Hostels & PGs in <span>${city.name}</span>`
-      : 'City not found';
-    if(city && city.image){
-      document.querySelector('.hero').style.backgroundImage = `url('${city.image}')`;
+    const city = cities.find(c => c.slug === citySlug);
+    if (city) {
+      document.title = `Hostels & PGs in ${city.name} — Apna Kamra`;
+      document.getElementById('cityTitle').innerHTML = `Hostels & PGs in <span>${city.name}</span>`;
+      if (city.image) document.getElementById('heroBg').style.backgroundImage = `url('${city.image}')`;
+      if (city.localities && city.localities.length) {
+        const all = [...city.localities, 'Other'];
+        document.getElementById('localitySection').style.display = 'block';
+        document.getElementById('localityChips').innerHTML = all.map(l => `
+          <div class="locality-chip" data-val="${l}">${l}</div>
+        `).join('');
+        document.querySelectorAll('#localityChips .locality-chip').forEach(chip => {
+          chip.onclick = () => chip.classList.toggle('active');
+        });
+      }
+    } else {
+      document.getElementById('cityTitle').textContent = 'City';
     }
-    if(city && city.localities && city.localities.length){
-      const all = [...city.localities, 'Other'];
-      document.getElementById('localitySection').style.display = 'block';
-      document.getElementById('localityChips').innerHTML = all.map(l=>`
-        <div class="locality-chip" data-val="${l}">${l}</div>
-      `).join('');
-      document.querySelectorAll('.locality-chip').forEach(chip=>{
-        chip.onclick = ()=> chip.classList.toggle('active');
-      });
-    }
-  }catch(e){}
+  } catch(e) {}
 }
 
-function buildQuery(){
+function buildQuery() {
   const params = new URLSearchParams();
   params.set('city', citySlug);
   const q = document.getElementById('searchInput').value.trim();
-  if(q) params.set('q', q);
+  if (q) params.set('q', q);
   params.set('sort', document.getElementById('sortSelect').value);
-  if(currentFilters.minPrice) params.set('minPrice', currentFilters.minPrice);
-  if(currentFilters.maxPrice) params.set('maxPrice', currentFilters.maxPrice);
-  if(currentFilters.amenities.length) params.set('amenities', currentFilters.amenities.join(','));
-  if(currentFilters.locality.length) params.set('locality', currentFilters.locality.join(','));
-  if(currentFilters.flag) params.set('flag', currentFilters.flag);
+  if (currentFilters.minPrice) params.set('minPrice', currentFilters.minPrice);
+  if (currentFilters.maxPrice) params.set('maxPrice', currentFilters.maxPrice);
+  if (currentFilters.amenities.length) params.set('amenities', currentFilters.amenities.join(','));
+  if (currentFilters.locality.length) params.set('locality', currentFilters.locality.join(','));
+  if (currentFilters.flag) params.set('flag', currentFilters.flag);
   return params.toString();
 }
 
-async function loadProps(){
+async function loadProps() {
   const el = document.getElementById('props');
   el.innerHTML = '<div class="empty-state">Loading properties...</div>';
-  try{
+  try {
     const rows = await apiGet(`${API}/properties?${buildQuery()}`);
     document.getElementById('resultCount').textContent = `${rows.length} properties found`;
-    if(!rows.length){
+    if (!rows.length) {
       el.innerHTML = '<div class="empty-state">No properties match your filters. Try adjusting them.</div>';
       return;
     }
     el.innerHTML = rows.map(p => `
       <a class="prop-card" href="/property/${p.slug}" data-pid="${p.id}">
         <div class="img-wrap">
-          <img data-src="${(p.images && p.images[0]) || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=900&auto=format&fit=crop'}" alt="${p.name}" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E">
+          <img data-src="${(p.images && p.images[0]) || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=900&auto=format&fit=crop'}"
+               src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 250'%3E%3Crect width='400' height='250' fill='%23141920'/%3E%3C/svg%3E" alt="${p.name}">
         </div>
         <div class="body">
-          <div style="display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px;">${statusBadges(p)}</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;">${statusBadges(p)}</div>
           <h3>${p.name}</h3>
-          <div class="loc">${p.locality ? p.locality + ', ' : ''}${p.city_name}</div>
+          <div class="loc">${p.locality ? p.locality + ' · ' : ''}${p.city_name}</div>
           <div class="amenity-tags">${amenityTags(p.amenities, 3)}</div>
           <div class="price-row">
             <span class="price">${fmtPrice(p.lowest_price)}</span>
@@ -176,55 +175,52 @@ async function loadProps(){
         </div>
       </a>
     `).join('');
-    document.querySelectorAll('[data-pid]').forEach(el=>ImpressionTracker.observe(el));
+    document.querySelectorAll('[data-pid]').forEach(el => ImpressionTracker.observe(el));
     lazyLoadImages();
-  }catch(e){
+  } catch(e) {
     el.innerHTML = '<div class="empty-state">Failed to load properties.</div>';
   }
 }
 
-// drawer logic
+// drawer
 const drawer = document.getElementById('drawer');
 const overlay = document.getElementById('overlay');
-document.getElementById('openFilters').onclick = ()=>{ drawer.classList.add('open'); overlay.classList.add('open'); };
+document.getElementById('openFilters').onclick = () => { drawer.classList.add('open'); overlay.classList.add('open'); };
 document.getElementById('closeDrawer').onclick = closeDrawer;
 overlay.onclick = closeDrawer;
-function closeDrawer(){ drawer.classList.remove('open'); overlay.classList.remove('open'); }
+function closeDrawer() { drawer.classList.remove('open'); overlay.classList.remove('open'); }
 
-document.getElementById('applyFilters').onclick = ()=>{
-  currentFilters.minPrice = document.getElementById('minPrice').value;
-  currentFilters.maxPrice = document.getElementById('maxPrice').value;
-  currentFilters.amenities = Array.from(document.querySelectorAll('.amen-cb:checked')).map(c=>c.value);
-  currentFilters.locality = Array.from(document.querySelectorAll('.locality-chip.active')).map(c=>c.dataset.val);
-  const activeFlag = document.querySelector('#flagChips .locality-chip.active');
-  currentFilters.flag = activeFlag ? activeFlag.dataset.val : '';
-  closeDrawer();
-  loadProps();
-};
-
-document.getElementById('clearFilters').onclick = ()=>{
-  document.getElementById('minPrice').value = '';
-  document.getElementById('maxPrice').value = '';
-  document.querySelectorAll('.amen-cb').forEach(c=>c.checked=false);
-  document.querySelectorAll('.locality-chip').forEach(c=>c.classList.remove('active'));
-  currentFilters = { minPrice:'', maxPrice:'', amenities:[], locality:[], flag:'' };
-  loadProps();
-};
-
-// flag chips are single-select
-document.querySelectorAll('#flagChips .locality-chip').forEach(chip=>{
-  chip.onclick = ()=>{
-    document.querySelectorAll('#flagChips .locality-chip').forEach(c=>c.classList.remove('active'));
+// flag chips single-select
+document.querySelectorAll('#flagChips .locality-chip').forEach(chip => {
+  chip.onclick = () => {
+    document.querySelectorAll('#flagChips .locality-chip').forEach(c => c.classList.remove('active'));
     chip.classList.add('active');
   };
 });
 
-document.getElementById('sortSelect').onchange = loadProps;
-let searchTimer;
-document.getElementById('searchInput').oninput = ()=>{
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(loadProps, 400);
+document.getElementById('applyFilters').onclick = () => {
+  currentFilters.minPrice = document.getElementById('minPrice').value;
+  currentFilters.maxPrice = document.getElementById('maxPrice').value;
+  currentFilters.amenities = Array.from(document.querySelectorAll('.amen-cb:checked')).map(c => c.value);
+  currentFilters.locality = Array.from(document.querySelectorAll('#localityChips .locality-chip.active')).map(c => c.dataset.val);
+  const af = document.querySelector('#flagChips .locality-chip.active');
+  currentFilters.flag = af ? af.dataset.val : '';
+  closeDrawer();
+  loadProps();
 };
+
+document.getElementById('clearFilters').onclick = () => {
+  document.getElementById('minPrice').value = '';
+  document.getElementById('maxPrice').value = '';
+  document.querySelectorAll('.amen-cb').forEach(c => c.checked = false);
+  document.querySelectorAll('.locality-chip').forEach(c => c.classList.remove('active'));
+  currentFilters = { minPrice:'', maxPrice:'', amenities:[], locality:[], flag:'' };
+  loadProps();
+};
+
+document.getElementById('sortSelect').onchange = loadProps;
+let st;
+document.getElementById('searchInput').oninput = () => { clearTimeout(st); st = setTimeout(loadProps, 400); };
 
 loadCityInfo();
 loadProps();

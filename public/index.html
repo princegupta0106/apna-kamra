@@ -4,10 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Apna Kamra — Find Hostels & PGs Near You</title>
-<meta name="description" content="Apna Kamra is India's hostel & PG directory. Browse verified hostels and paying guest accommodations across cities, compare prices, amenities and call owners directly. No booking fee.">
-<meta name="keywords" content="hostel, PG, paying guest, hostel near me, boys hostel, girls hostel, student hostel, hostel Jaipur, hostel Bangalore, hostel Delhi">
+<meta name="description" content="Apna Kamra is India's hostel & PG directory. Browse verified hostels and paying guest accommodations across cities, compare prices, amenities and call owners directly.">
 <meta property="og:title" content="Apna Kamra — Find Hostels & PGs Near You">
-<meta property="og:description" content="Browse verified hostels & PGs across cities. Compare prices, amenities, and call owners directly. No booking fee.">
+<meta property="og:description" content="Browse verified hostels & PGs across cities. Compare prices, amenities, call owners directly.">
 <meta property="og:image" content="https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=1200&auto=format&fit=crop">
 <meta property="og:type" content="website">
 <meta name="twitter:card" content="summary_large_image">
@@ -16,8 +15,8 @@
 </head>
 <body>
 
-<nav class="navbar">
-  <div class="container inner">
+<nav class="navbar" id="mainNav">
+  <div class="inner">
     <a href="/" class="brand">Apna <span>Kamra</span></a>
     <div class="nav-links">
       <button class="btn btn-sm theme-toggle"></button>
@@ -26,57 +25,114 @@
   </div>
 </nav>
 
-<div class="hero" style="background-image:url('https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?q=80&w=1600&auto=format&fit=crop')">
+<!-- HERO -->
+<div class="hero-full">
+  <div class="hero-bg" style="background-image:url('https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?q=80&w=1920&auto=format&fit=crop')"></div>
   <div class="hero-content">
-    <h1>Find your next <span>Kamra</span></h1>
-    <p>Apna Kamra is a directory of verified hostels & PGs across cities — compare prices, sharing options and amenities, then call owners directly.</p>
+    <div class="hero-eyebrow">Welcome to</div>
+    <h1>Apna <span>Kamra</span></h1>
+    <div class="hero-divider"></div>
+    <div class="hero-tagline">Where Every Student Finds Their Perfect Stay</div>
+    <div class="hero-actions">
+      <a href="#cities" class="btn btn-solid">Explore Cities</a>
+      <a href="/list-property.html" class="btn">List Your Property</a>
+    </div>
+  </div>
+  <div class="hero-scroll-hint">
+    <span>scroll</span>
+    <span style="font-size:16px;">↓</span>
   </div>
 </div>
 
-<div class="container section">
-  <div class="section-title">Choose your city</div>
-  <div class="city-search-wrap">
-    <input type="text" id="citySearch" class="city-search" placeholder="Search cities...">
-  </div>
-  <div id="cities" class="city-grid">
-    <div class="empty-state">Loading cities...</div>
+<!-- CITIES SECTION -->
+<div class="section" id="cities" style="padding-top:80px;">
+  <div class="container">
+    <div class="section-title">Explore</div>
+    <div class="section-heading">Choose Your City</div>
+    <div class="gold-rule"><span>✦</span></div>
+    <div class="city-search-wrap">
+      <input type="text" id="citySearch" class="city-search" placeholder="Search cities...">
+    </div>
+    <div id="citiesGrid" class="city-grid">
+      <div class="empty-state">Loading cities...</div>
+    </div>
   </div>
 </div>
 
+<!-- WHY SECTION -->
+<div style="background:var(--bg-soft); border-top:1px solid var(--card-border); border-bottom:1px solid var(--card-border); padding:60px 0;">
+  <div class="container" style="text-align:center;">
+    <div class="section-title">Why Apna Kamra</div>
+    <div class="section-heading" style="margin-bottom:44px;">A Better Way to Find Your Stay</div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:28px; max-width:900px; margin:0 auto;">
+      <div style="padding:28px 20px;">
+        <div style="font-size:32px; margin-bottom:14px;">🔍</div>
+        <div style="font-size:15px; font-weight:700; margin-bottom:8px; font-family:'Georgia',serif;">Verified Listings</div>
+        <div style="font-size:13px; color:var(--text-dim); line-height:1.7;">Every property is reviewed before listing. No fake listings, no surprises.</div>
+      </div>
+      <div style="padding:28px 20px;">
+        <div style="font-size:32px; margin-bottom:14px;">📞</div>
+        <div style="font-size:15px; font-weight:700; margin-bottom:8px; font-family:'Georgia',serif;">Direct Contact</div>
+        <div style="font-size:13px; color:var(--text-dim); line-height:1.7;">Call or WhatsApp owners directly. Zero brokerage, zero middlemen.</div>
+      </div>
+      <div style="padding:28px 20px;">
+        <div style="font-size:32px; margin-bottom:14px;">💰</div>
+        <div style="font-size:15px; font-weight:700; margin-bottom:8px; font-family:'Georgia',serif;">Transparent Pricing</div>
+        <div style="font-size:13px; color:var(--text-dim); line-height:1.7;">See single, double and triple sharing prices upfront before you call.</div>
+      </div>
+      <div style="padding:28px 20px;">
+        <div style="font-size:32px; margin-bottom:14px;">🏠</div>
+        <div style="font-size:15px; font-weight:700; margin-bottom:8px; font-family:'Georgia',serif;">All Amenities Listed</div>
+        <div style="font-size:13px; color:var(--text-dim); line-height:1.7;">WiFi, AC, meals, parking and more — filter for exactly what you need.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
 <div class="footer">
-  Apna Kamra — your trusted directory for hostels & PGs.
-  <div class="links">
-    <a href="/list-property.html">List Your Property</a>
-    <a href="/owner">Owner Login</a>
-    <a href="/admin">Admin</a>
+  <div class="container">
+    <div class="brand-footer">Apna <span>Kamra</span></div>
+    <div class="tagline">Your trusted directory for hostels & PGs across India</div>
+    <div class="links">
+      <a href="/list-property.html">List Your Property</a>
+      <a href="/owner">Owner Login</a>
+      <a href="/admin">Admin</a>
+    </div>
   </div>
 </div>
 
 <script src="/js/main.js"></script>
 <script>
-// Ask for mobile on homepage load (first visit)
+// Navbar scroll effect
+window.addEventListener('scroll', () => {
+  document.getElementById('mainNav').classList.toggle('scrolled', window.scrollY > 60);
+});
+document.getElementById('mainNav').classList.toggle('scrolled', window.scrollY > 60);
+
+// Ask for mobile on first visit
 document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(() => Visitor.askIfNeeded(null), 1200);
+  setTimeout(() => Visitor.askIfNeeded(null), 2000);
 });
 
-async function loadCities(){
-  const el = document.getElementById('cities');
-  try{
+async function loadCities() {
+  const el = document.getElementById('citiesGrid');
+  try {
     const cities = await apiGet(API + '/cities');
-    if(!cities.length){
+    if (!cities.length) {
       el.innerHTML = '<div class="empty-state">No cities added yet. Please check back soon.</div>';
       return;
     }
     window._allCities = cities;
     renderCities(cities);
-  }catch(e){
+  } catch(e) {
     el.innerHTML = '<div class="empty-state">Failed to load cities.</div>';
   }
 }
 
-function renderCities(cities){
-  const el = document.getElementById('cities');
-  if(!cities.length){
+function renderCities(cities) {
+  const el = document.getElementById('citiesGrid');
+  if (!cities.length) {
     el.innerHTML = '<div class="empty-state">No cities match your search.</div>';
     return;
   }
@@ -85,7 +141,7 @@ function renderCities(cities){
       <img data-src="${c.image || 'https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?q=80&w=800&auto=format&fit=crop'}" alt="${c.name}">
       <div class="overlay">
         <div>
-          <span>EXPLORE</span>
+          <span>Explore</span>
           <h3>${c.name}</h3>
         </div>
       </div>
@@ -94,18 +150,19 @@ function renderCities(cities){
   lazyLoadImages(el);
 }
 
-function cityClicked(slug, name){
+function cityClicked(slug, name) {
   Visitor.askIfNeeded((mobile) => {
-    if(mobile) Visitor.trackCity(name);
+    if (mobile) Visitor.trackCity(name);
     location.href = '/city/' + slug;
   });
 }
 
-document.getElementById('citySearch').oninput = (e)=>{
+document.getElementById('citySearch').oninput = (e) => {
   const q = e.target.value.trim().toLowerCase();
   const filtered = (window._allCities || []).filter(c => c.name.toLowerCase().includes(q));
   renderCities(filtered);
 };
+
 loadCities();
 </script>
 </body>

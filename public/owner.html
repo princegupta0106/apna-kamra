@@ -161,7 +161,7 @@ async function loadProperties() {
       return;
     }
     list.innerHTML = '<div class="prop-grid">' + myProps.map(p => `
-      <div class="prop-card" style="cursor:default;">
+      <div class="owner-prop-card">
         <div class="img-wrap">
           <img data-src="${(p.images && p.images[0]) || 'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=900&auto=format&fit=crop'}"
                src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 300'%3E%3Crect width='400' height='300' fill='%23222'/%3E%3C/svg%3E" alt="${p.name}">
