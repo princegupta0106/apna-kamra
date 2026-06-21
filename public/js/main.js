@@ -26,7 +26,12 @@ async function fetchWithRetry(url, options = {}, retries = 3, delay = 1200) {
 
 async function apiGet(url) {
   const res = await fetchWithRetry(url);
-  if (!res.ok) throw new Error((await res.json()).error || 'Request failed');
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(body.message || body.error || 'Request failed');
+    err.code = body.error;
+    throw err;
+  }
   return res.json();
 }
 
@@ -71,30 +76,25 @@ const Visitor = (() => {
 
   function askIfNeeded(onDone) {
     if (_mobile) { if (onDone) onDone(_mobile); return; }
+    if (document.getElementById('visitorSheet')) return; // already showing
 
     const sheet = document.createElement('div');
     sheet.id = 'visitorSheet';
     sheet.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:300;display:flex;align-items:center;justify-content:center;padding:20px;';
     sheet.innerHTML = `
       <div style="background:var(--card);border:1px solid var(--card-border);border-top:3px solid var(--accent);padding:30px 24px;width:100%;max-width:420px;border-radius:6px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
-        <div style="font-size:20px;font-weight:800;margin-bottom:8px;color:var(--text);">Welcome to Apna Kamra 👋</div>
-        <div style="color:var(--text-dim);font-size:13px;margin-bottom:20px;line-height:1.6;">Enter your 10-digit mobile number to get personalised hostel & PG recommendations and connect with owners directly.</div>
+        <div style="font-size:20px;font-weight:800;margin-bottom:8px;color:var(--text);font-family:Georgia,serif;">Welcome to Apna Kamra 👋</div>
+        <div style="color:var(--text-dim);font-size:13px;margin-bottom:20px;line-height:1.6;">Please enter your 10-digit mobile number to continue browsing hostels & PGs and connect with owners.</div>
         <input id="visitorMobileInput" type="tel" maxlength="10" pattern="[0-9]{10}" placeholder="10-digit mobile number"
           style="width:100%;background:var(--bg-soft);border:1px solid var(--card-border);color:var(--text);padding:13px 14px;border-radius:4px;font-size:16px;margin-bottom:12px;box-sizing:border-box;">
-        <div style="display:flex;gap:10px;">
-          <button id="visitorSubmitBtn" style="flex:1;background:var(--accent);color:#11161d;font-weight:800;border:none;padding:13px;border-radius:4px;font-size:15px;cursor:pointer;">Continue</button>
-          <button id="visitorSkipBtn" style="background:none;border:1px solid var(--card-border);color:var(--text-dim);padding:13px 18px;border-radius:4px;font-size:13px;cursor:pointer;">Skip</button>
-        </div>
-        <div id="visitorMsg" style="margin-top:10px;color:#e57368;font-size:12px;min-height:16px;"></div>
+        <button id="visitorSubmitBtn" style="width:100%;background:var(--accent);color:#11161d;font-weight:800;border:none;padding:13px;border-radius:4px;font-size:15px;cursor:pointer;">Continue</button>
+        <div id="visitorMsg" style="margin-top:10px;color:#e57368;font-size:12px;min-height:16px;text-align:center;"></div>
       </div>
     `;
     document.body.appendChild(sheet);
 
-    // only allow digits
     const inp = document.getElementById('visitorMobileInput');
-    inp.addEventListener('input', () => {
-      inp.value = inp.value.replace(/\D/g, '').slice(0, 10);
-    });
+    inp.addEventListener('input', () => { inp.value = inp.value.replace(/\D/g, '').slice(0, 10); });
 
     document.getElementById('visitorSubmitBtn').onclick = () => {
       const val = inp.value.trim();
@@ -105,10 +105,6 @@ const Visitor = (() => {
       setMobile(val);
       sheet.remove();
       if (onDone) onDone(val);
-    };
-    document.getElementById('visitorSkipBtn').onclick = () => {
-      sheet.remove();
-      if (onDone) onDone(null);
     };
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('visitorSubmitBtn').click(); });
     setTimeout(() => inp.focus(), 100);
@@ -188,6 +184,17 @@ const ImpressionTracker = (() => {
 
 document.addEventListener('DOMContentLoaded', () => ImpressionTracker.init());
 
+// Auto-prompt for mobile number on public pages if not yet stored.
+// Admin/owner panels are excluded since they have their own login.
+(function(){
+  const path = location.pathname;
+  const isPrivatePanel = path.startsWith('/admin') || path.startsWith('/owner');
+  if (isPrivatePanel) return;
+  document.addEventListener('DOMContentLoaded', () => {
+    if (!Visitor.hasMobile()) Visitor.askIfNeeded(null);
+  });
+})();
+
 // ---------- Lazy image loading ----------
 function lazyLoadImages(container) {
   const imgs = (container || document).querySelectorAll('img[data-src]');
@@ -207,12 +214,12 @@ function lazyLoadImages(container) {
 
 // ---------- Theme Toggle ----------
 function initTheme() {
-  const saved = localStorage.getItem('ak_theme') || 'dark';
+  const saved = localStorage.getItem('ak_theme') || 'light';
   document.documentElement.setAttribute('data-theme', saved);
   updateThemeIcon(saved);
 }
 function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const current = document.documentElement.getAttribute('data-theme') || 'light';
   const next = current === 'dark' ? 'light' : 'dark';
   document.documentElement.setAttribute('data-theme', next);
   localStorage.setItem('ak_theme', next);
@@ -220,7 +227,8 @@ function toggleTheme() {
 }
 function updateThemeIcon(theme) {
   document.querySelectorAll('.theme-toggle').forEach(btn => {
-    btn.textContent = theme === 'dark' ? '☀️ Light' : '🌙 Dark';
+    btn.innerHTML = theme === 'dark' ? '☀️' : '🌙';
+    btn.title = theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode';
   });
 }
 initTheme();
@@ -228,7 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('.theme-toggle').forEach(btn => {
     btn.addEventListener('click', toggleTheme);
   });
-  updateThemeIcon(document.documentElement.getAttribute('data-theme') || 'dark');
+  updateThemeIcon(document.documentElement.getAttribute('data-theme') || 'light');
 });
 
 // ---------- General FAQs ----------

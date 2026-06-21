@@ -8,18 +8,18 @@
 <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-<nav class="navbar">
+<nav class="navbar scrolled">
   <div class="container inner">
     <a href="/" class="brand">Apna <span>Kamra</span></a>
     <div class="nav-links">
-      <button class="btn btn-sm theme-toggle"></button>
-      <span id="ownerLabel" style="color:var(--text-dim); font-size:13px;"></span>
-      <button class="btn btn-sm btn-ghost" id="logoutBtn" style="display:none;">Logout</button>
+      <a href="/" class="icon-btn" title="Home">🏠</a>
+      <button class="icon-btn theme-toggle"></button>
+      <button class="icon-btn" id="logoutBtn" title="Logout" style="display:none;">⏻</button>
     </div>
   </div>
 </nav>
 
-<div class="container section">
+<div class="container section" style="padding-top:108px;">
 
   <!-- LOGIN -->
   <div id="loginBox" class="panel-card" style="max-width:420px; margin:40px auto;">
@@ -126,7 +126,6 @@ function authQS() { return `mobile=${auth.mobile}&password=${encodeURIComponent(
 function showDashboard() {
   document.getElementById('loginBox').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
-  document.getElementById('ownerLabel').textContent = `Logged in as ${auth.mobile}`;
   document.getElementById('logoutBtn').style.display = 'inline-flex';
   loadProperties();
   loadCityVisitors();

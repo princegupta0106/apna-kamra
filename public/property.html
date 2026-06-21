@@ -18,8 +18,9 @@
   <div class="inner">
     <a href="/" class="brand">Apna <span>Kamra</span></a>
     <div class="nav-links">
-      <button class="btn btn-sm theme-toggle"></button>
-      <a href="/list-property.html" class="btn btn-sm">List Your Property</a>
+      <a href="/" class="icon-btn" title="Home">🏠</a>
+      <button class="icon-btn theme-toggle"></button>
+      <a href="/list-property.html" class="btn btn-sm nav-cta">List Property</a>
     </div>
   </div>
 </nav>
@@ -69,6 +70,24 @@ async function load() {
       'https://images.unsplash.com/photo-1555854877-bab0e564b8d5?q=80&w=1200&auto=format&fit=crop'
     ];
     if (images[0]) document.getElementById('ogImage').setAttribute('content', images[0]);
+
+    // structured data for SEO
+    const ld = document.createElement('script');
+    ld.type = 'application/ld+json';
+    ld.textContent = JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "LodgingBusiness",
+      "name": p.name,
+      "description": p.description || desc,
+      "image": images,
+      "address": {
+        "@type": "PostalAddress",
+        "addressLocality": p.city_name,
+        "streetAddress": p.locality || undefined
+      },
+      "priceRange": p.lowest_price ? `₹${p.lowest_price}+` : undefined
+    });
+    document.head.appendChild(ld);
 
     // HERO — full bleed with first image
     document.getElementById('propHero').innerHTML = `
@@ -162,21 +181,29 @@ async function load() {
     // contact reveal
     document.getElementById('showContactBtn').onclick = async () => {
       try {
-        const c = await apiGet(`${API}/properties/${slug}/contact`);
+        const visitorParam = Visitor.getMobile() ? `?visitor=${Visitor.getMobile()}` : '';
+        const c = await apiGet(`${API}/properties/${slug}/contact${visitorParam}`);
         document.getElementById('showContactBtn').style.display = 'none';
         document.getElementById('contactResult').innerHTML = `
           <div class="contact-number">${c.owner_mobile || 'Not available'}</div>
           ${c.owner_mobile ? `<a class="btn btn-solid btn-block" style="margin-top:12px;" href="tel:${c.owner_mobile}">Call Now</a>` : ''}
         `;
       } catch(e) {
-        document.getElementById('contactResult').innerHTML = '<div style="color:var(--text-dim);margin-top:10px;">Could not load contact.</div>';
+        document.getElementById('contactResult').innerHTML = `<div style="color:var(--text-dim);margin-top:10px;font-size:13px;">${e.message || 'Could not load contact.'}</div>`;
       }
     };
 
     // whatsapp
     document.getElementById('whatsappBtn').onclick = async () => {
       let ownerMobile = null;
-      try { const c = await apiGet(`${API}/properties/${slug}/contact`); ownerMobile = c.owner_mobile; } catch(e) {}
+      try {
+        const visitorParam = Visitor.getMobile() ? `?visitor=${Visitor.getMobile()}` : '';
+        const c = await apiGet(`${API}/properties/${slug}/contact${visitorParam}`);
+        ownerMobile = c.owner_mobile;
+      } catch(e) {
+        alert(e.message || 'Could not load contact right now.');
+        return;
+      }
       window.open(whatsappLink(p.name, p.slug, ownerMobile), '_blank');
     };
 

@@ -85,6 +85,12 @@ async function initDatabase() {
       event_type TEXT DEFAULT 'view',
       created_at INTEGER
     )`,
+    `CREATE TABLE IF NOT EXISTS contact_reveals (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      visitor_mobile TEXT NOT NULL,
+      property_id INTEGER NOT NULL,
+      created_at INTEGER
+    )`,
     `CREATE TABLE IF NOT EXISTS meta (
       key TEXT PRIMARY KEY,
       value TEXT
@@ -598,10 +604,56 @@ app.get('/api/properties/:slug', asyncHandler(async (req, res) => {
   res.json(rest);
 }));
 
+// Rate limits: a single visitor can reveal contact for at most
+// DAILY_LIMIT distinct properties per day and MONTHLY_LIMIT per rolling 30 days.
+const CONTACT_DAILY_LIMIT = 20;
+const CONTACT_MONTHLY_LIMIT = 50;
+
 app.get('/api/properties/:slug/contact', asyncHandler(async (req, res) => {
-  const r = await db.execute({ sql: 'SELECT owner_mobile, owner_name FROM properties WHERE slug=?', args: [req.params.slug] });
+  const r = await db.execute({ sql: 'SELECT id, owner_mobile, owner_name FROM properties WHERE slug=?', args: [req.params.slug] });
   if (!r.rows.length) return res.status(404).json({ error: 'not found' });
-  res.json({ owner_mobile: r.rows[0].owner_mobile, owner_name: r.rows[0].owner_name });
+  const property = r.rows[0];
+
+  const visitorMobile = (req.query.visitor || '').toString().trim();
+
+  // only rate-limit when we know who's asking; unknown visitors still get the number
+  // (keeps the contact gate subtle rather than blocking entirely)
+  if (visitorMobile && /^[0-9]{10}$/.test(visitorMobile)) {
+    const now = Date.now();
+    const dayAgo = now - 24 * 60 * 60 * 1000;
+    const monthAgo = now - 30 * 24 * 60 * 60 * 1000;
+
+    // has this visitor already unlocked this exact property? if so, no limit applies (repeat view is free)
+    const already = await db.execute({
+      sql: 'SELECT id FROM contact_reveals WHERE visitor_mobile=? AND property_id=? LIMIT 1',
+      args: [visitorMobile, property.id]
+    });
+
+    if (!already.rows.length) {
+      const dayCount = await db.execute({
+        sql: 'SELECT COUNT(DISTINCT property_id) as c FROM contact_reveals WHERE visitor_mobile=? AND created_at>=?',
+        args: [visitorMobile, dayAgo]
+      });
+      const monthCount = await db.execute({
+        sql: 'SELECT COUNT(DISTINCT property_id) as c FROM contact_reveals WHERE visitor_mobile=? AND created_at>=?',
+        args: [visitorMobile, monthAgo]
+      });
+
+      if (Number(dayCount.rows[0].c) >= CONTACT_DAILY_LIMIT) {
+        return res.status(429).json({ error: 'limit_reached', message: "You've reached today's limit for viewing owner contacts. Please try again tomorrow." });
+      }
+      if (Number(monthCount.rows[0].c) >= CONTACT_MONTHLY_LIMIT) {
+        return res.status(429).json({ error: 'limit_reached', message: "You've reached this month's limit for viewing owner contacts." });
+      }
+
+      await db.execute({
+        sql: 'INSERT INTO contact_reveals (visitor_mobile, property_id, created_at) VALUES (?,?,?)',
+        args: [visitorMobile, property.id, now]
+      });
+    }
+  }
+
+  res.json({ owner_mobile: property.owner_mobile, owner_name: property.owner_name });
 }));
 
 // ---------------- PROPERTIES (admin / owner write) ----------------
@@ -913,23 +965,31 @@ app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'adm
 
 const SITE_BASE = 'https://apna-kamra.up.railway.app';
 
-app.get('/robots.txt', (req, res) => {
-  res.type('text/plain');
-  res.send(`User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /owner\nSitemap: ${SITE_BASE}/sitemap.xml`);
-});
-
 app.get('/sitemap.xml', asyncHandler(async (req, res) => {
   const cities = await db.execute('SELECT slug FROM cities');
-  const props = await db.execute('SELECT slug FROM properties WHERE visible=1');
-  const staticPages = ['/', '/list-property.html'];
-  const urls = [
-    ...staticPages.map(p => `${SITE_BASE}${p}`),
-    ...cities.rows.map(c => `${SITE_BASE}/city/${c.slug}`),
-    ...props.rows.map(p => `${SITE_BASE}/property/${p.slug}`)
+  const props = await db.execute('SELECT slug, created_at FROM properties WHERE visible=1');
+  const today = new Date().toISOString().split('T')[0];
+
+  const entries = [
+    { loc: `${SITE_BASE}/`, priority: '1.0', changefreq: 'daily' },
+    { loc: `${SITE_BASE}/list-property.html`, priority: '0.5', changefreq: 'monthly' },
+    ...cities.rows.map(c => ({ loc: `${SITE_BASE}/city/${c.slug}`, priority: '0.9', changefreq: 'daily' })),
+    ...props.rows.map(p => ({
+      loc: `${SITE_BASE}/property/${p.slug}`,
+      priority: '0.8',
+      changefreq: 'weekly',
+      lastmod: p.created_at ? new Date(Number(p.created_at)).toISOString().split('T')[0] : today
+    }))
   ];
+
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls.map(u => `  <url><loc>${u}</loc><changefreq>weekly</changefreq></url>`).join('\n')}
+${entries.map(e => `  <url>
+    <loc>${e.loc}</loc>
+    ${e.lastmod ? `<lastmod>${e.lastmod}</lastmod>` : ''}
+    <changefreq>${e.changefreq}</changefreq>
+    <priority>${e.priority}</priority>
+  </url>`).join('\n')}
 </urlset>`;
   res.type('application/xml');
   res.send(xml);

@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /owner
+Sitemap: https://apna-kamra.up.railway.app/sitemap.xml
