@@ -1,13 +1,23 @@
 /**
  * Apna Kamra — Sitemap Generator (standalone, manual)
  * -----------------------------------------------------
- * Generates a complete sitemap.xml from your LIVE site's public API
- * (cities + visible properties) and saves it to sitemap-generated.xml
- * right next to this script. Upload that file to Google Search Console
- * if the live /sitemap.xml route isn't reachable for some reason.
+ * Generates a complete sitemap.xml with URLs on your public domain
+ * (apnakamra.in) using real city + property data fetched from your
+ * Railway API, and saves it to sitemap-generated.xml right next to
+ * this script.
+ *
+ * Since your frontend is statically hosted (Vercel) and can't run
+ * server-side routes, this is the correct way to keep sitemap.xml
+ * up to date: run this script, then upload the output file to
+ * public/sitemap.xml on Vercel, replacing the old one.
+ *
+ * IMPORTANT: every <loc> in the sitemap must match the domain the
+ * sitemap itself is served from. That's why this script writes
+ * apnakamra.in URLs even though it reads data from Railway.
  *
  * Usage:
  *   node generate-sitemap.js
+ *   (then upload the resulting sitemap-generated.xml to Vercel as sitemap.xml)
  *
  * Requires no npm install — uses only Node's built-in https module.
  */
@@ -16,7 +26,13 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 
-const SITE_BASE = 'https://apna-kamra-production.up.railway.app';
+// SITE_BASE = the public-facing domain your sitemap URLs should point to
+// (this is what users/Google actually see — your Vercel frontend's custom domain)
+const SITE_BASE = 'https://apnakamra.in';
+
+// API_BASE = where your backend/API actually lives (Railway) — used only to
+// FETCH the city/property data, never appears in the output URLs
+const API_BASE = 'https://apna-kamra.up.railway.app';
 
 function fetchJSON(url) {
   return new Promise((resolve, reject) => {
@@ -32,14 +48,14 @@ function fetchJSON(url) {
 }
 
 async function main() {
-  console.log(`Fetching cities and properties from ${SITE_BASE} ...`);
+  console.log(`Fetching cities and properties from ${API_BASE} ...`);
 
-  const cities = await fetchJSON(`${SITE_BASE}/api/cities`);
+  const cities = await fetchJSON(`${API_BASE}/api/cities`);
   console.log(`Found ${cities.length} cities.`);
 
   let allProperties = [];
   for (const city of cities) {
-    const props = await fetchJSON(`${SITE_BASE}/api/properties?city=${city.slug}`);
+    const props = await fetchJSON(`${API_BASE}/api/properties?city=${city.slug}`);
     allProperties = allProperties.concat(props);
     console.log(`  ${city.name}: ${props.length} properties`);
   }

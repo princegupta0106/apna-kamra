@@ -963,7 +963,12 @@ app.get('/city/:slug', (req, res) => res.sendFile(path.join(__dirname, 'public',
 app.get('/owner', (req, res) => res.sendFile(path.join(__dirname, 'public', 'owner.html')));
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 
-const SITE_BASE = 'https://apna-kamra.up.railway.app';
+// NOTE: this dynamic /sitemap.xml route only works if requested directly on
+// Railway's domain — it is NOT reachable at apnakamra.in since your frontend
+// is hosted separately on Vercel and Vercel can't execute this server route.
+// For the public sitemap at apnakamra.in/sitemap.xml, use generate-sitemap.js
+// instead and upload the output to your Vercel public/ folder manually.
+const SITE_BASE = 'https://apnakamra.in';
 
 app.get('/sitemap.xml', asyncHandler(async (req, res) => {
   const cities = await db.execute('SELECT slug FROM cities');
