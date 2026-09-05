@@ -10,19 +10,18 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
-// ---------------- CONFIG (hardcoded as requested) ----------------
-const ADMIN_MOBILE = '9983798590';
-const ADMIN_PASS = 'passtemp';
+// ---------------- CONFIG ----------------
+const ADMIN_MOBILE = process.env.ADMIN_MOBILE;
+const ADMIN_PASS = process.env.ADMIN_PASS;
 
-const R2_ACCOUNT_ID = '96a1a10ac8eb5b5ec6f47a5ea3882873';
-const R2_ACCESS_KEY_ID = '40069aaf88203e813fa608762a8a8ee4';
-const R2_SECRET_ACCESS_KEY = 'b29a65ed0eb4e841cff34edfaa5d4be5fad5e268fef54940c1f9a4038ac0a4fd';
-const R2_BUCKET_NAME = 'lms';
-const R2_PUBLIC_URL = 'https://pub-d97a4f82b1804020a1c6d95656eb5649.r2.dev';
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
+const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
+const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL;
 
-const TURSO_DATABASE_URL = 'file:lms.db';
-const TURSO_AUTH_TOKEN = undefined;
-
+const TURSO_DATABASE_URL = process.env.TURSO_DATABASE_URL;
+const TURSO_AUTH_TOKEN = process.env.TURSO_AUTH_TOKEN;
 // ---------------- DATABASE (Turso / libSQL) ----------------
 const db = createClient({
   url: TURSO_DATABASE_URL,
